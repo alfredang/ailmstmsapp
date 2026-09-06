@@ -25,7 +25,7 @@ xcodebuild -project TertiaryLearning.xcodeproj -scheme TertiaryLearning -destina
 
 The isolated `backend/` checkout contains the companion changes to AI-LMS-TMS. Mobile routes derive identity from a verified server-side session and validate the selected role. No user IDs from the device are trusted for data access.
 
-`/api/mobile/auth` sends and verifies OTPs; `/me`, `/dashboard`, `/device` and `/delete-account` serve the native app. `/send-reminders` accepts only the configured machine API key. Read `backend/docs/mobile-ios.md` for configuration and verification.
+`/api/mobile/auth` sends and verifies OTPs; `/me`, `/dashboard`, `/device` and `/delete-account` serve the native app. `/send-reminders` accepts only the configured machine API key. Read [the backend configuration guide](https://github.com/alfredang/AI-LMS-TMS/blob/main/docs/mobile-ios.md) for configuration and verification. The backend is a separate repository and is intentionally excluded from this app repository.
 
 ## Skills
 
