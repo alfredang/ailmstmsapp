@@ -142,20 +142,23 @@ struct LoginView: View {
 struct MainView: View {
   @EnvironmentObject var store: Store
   var body: some View {
-    TabView(selection: $store.selectedTab) {
-      NavigationStack { HomeView() }.tabItem { Label("Today", systemImage: "sun.max.fill") }.tag(0)
-      NavigationStack { CoursesView() }.tabItem {
-        Label("Courseware", systemImage: "books.vertical.fill")
-      }.tag(1)
-      NavigationStack { CalendarView() }.tabItem { Label("Calendar", systemImage: "calendar") }.tag(
-        2)
-      NavigationStack { AccountView() }.tabItem {
-        Label("Account", systemImage: "person.crop.circle")
-      }.tag(3)
-    }.safeAreaInset(edge: .top, spacing: 0) {
+    VStack(spacing: 0) {
       if store.demo {
         Text("SAMPLE DATA · \(store.role.uppercased()) DEMO").font(.caption.weight(.semibold))
           .frame(maxWidth: .infinity).padding(6).background(.yellow.opacity(0.2))
+      }
+      TabView(selection: $store.selectedTab) {
+        NavigationStack { HomeView() }.tabItem { Label("Today", systemImage: "sun.max.fill") }.tag(
+          0)
+        NavigationStack { CoursesView() }.tabItem {
+          Label("Courseware", systemImage: "books.vertical.fill")
+        }.tag(1)
+        NavigationStack { CalendarView() }.tabItem { Label("Calendar", systemImage: "calendar") }
+          .tag(
+            2)
+        NavigationStack { AccountView() }.tabItem {
+          Label("Account", systemImage: "person.crop.circle")
+        }.tag(3)
       }
     }
   }

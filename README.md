@@ -34,3 +34,7 @@ Project `.agents/skills` and `.claude/skills` expose the imported user/Claude iO
 ## Release
 
 See `release/STATUS.md` for verified build, deployment and App Store Connect status. A successful archive does not mean the app has been submitted or approved. Do not commit `.env`, `.private/`, signing private keys or provisioning profiles.
+
+## Preview
+
+![Learner dashboard](release/screenshots/iphone/01-learner-today.png)
