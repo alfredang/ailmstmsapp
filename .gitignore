@@ -1,0 +1,17 @@
+.env
+.env.*
+*.p8
+*.p12
+*.mobileprovision
+build/
+DerivedData/
+backend/
+.DS_Store
+
+.private/
+.playwright-mcp/
+
+__pycache__/
+*.pyc
+*.xcuserstate
+xcuserdata/

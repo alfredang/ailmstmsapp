@@ -1,0 +1,36 @@
+# Tertiary Learning — native iOS app
+
+A SwiftUI iPhone and iPad companion for [AI-LMS-TMS](https://github.com/alfredang/AI-LMS-TMS), restricted to registered learners and trainers.
+
+- Email OTP with single-use, expiring codes and server-side attempt limits.
+- Keychain session storage and server-side logout.
+- Assigned courseware, learner guides, activities and trainer-only slides.
+- Singapore-time class calendar and Apple Calendar export.
+- APNs reminders three days and one day before each published class session.
+- Native Feedback, About, notification settings and account deletion.
+- Clearly labelled sample learner/trainer experiences for App Review.
+
+## Build
+
+Requires Xcode 26 and XcodeGen. Minimum iOS 17.
+
+```sh
+xcodegen generate
+xcodebuild -project TertiaryLearning.xcodeproj -scheme TertiaryLearning -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' test
+```
+
+`project.yml` is the project source of truth. Bundle ID: `com.tertiaryinfotech.ailmstms`. Apple team: `GU9WTSTX9M`.
+
+## Backend
+
+The isolated `backend/` checkout contains the companion changes to AI-LMS-TMS. Mobile routes derive identity from a verified server-side session and validate the selected role. No user IDs from the device are trusted for data access.
+
+`/api/mobile/auth` sends and verifies OTPs; `/me`, `/dashboard`, `/device` and `/delete-account` serve the native app. `/send-reminders` accepts only the configured machine API key. Read `backend/docs/mobile-ios.md` for configuration and verification.
+
+## Skills
+
+Project `.agents/skills` and `.claude/skills` expose the imported user/Claude iOS design, submission and release skills. `skills-import.json` records their origins. Credentials and the credential-bootstrap subskill are intentionally excluded from imported copies.
+
+## Release
+
+See `release/STATUS.md` for verified build, deployment and App Store Connect status. A successful archive does not mean the app has been submitted or approved. Do not commit `.env`, `.private/`, signing private keys or provisioning profiles.
