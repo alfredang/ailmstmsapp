@@ -1,17 +1,42 @@
+# Secrets and signing material — never commit
 .env
 .env.*
 *.p8
 *.p12
+*.pem
 *.mobileprovision
+*.crt
+*.key
+
+# Build output
 build/
 DerivedData/
-backend/
-.DS_Store
+*.xcarchive
+*.ipa
+xcuserdata/
+*.xcuserstate
 
+# Backend lives in its own repository
+backend/
+
+# Local agent tooling, imported skills and submission scripts — not app code
+.agents/
+.claude/
+.imported-skills/
+skills-import.json
+AGENTS.md
+scripts/
+ExportOptions.plist
+
+# Release/ops records — internal, not part of the app
+release/
+!release/screenshots/
+
+# Local working dirs
 .private/
 .playwright-mcp/
 
+# Cruft
+.DS_Store
 __pycache__/
 *.pyc
-*.xcuserstate
-xcuserdata/

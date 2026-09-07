@@ -1,0 +1,68 @@
+[
+  {
+    "attachments": [
+      {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "A48B0A9A-44E6-49CA-9CB7-B1F7BB0F29CE",
+        "deviceName": "iPhone 17 Pro Max",
+        "exportedFileName": "06-trainer-materials.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "06-trainer-materials_0_9A587D31-3F97-4F97-BE24-92CCC8C3AB60.png",
+        "timestamp": 1788720632.103,
+        "originalExportedFileName": "9FC85BB5-F24B-49B0-B5A6-51D8A60A4074.png"
+      },
+      {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "A48B0A9A-44E6-49CA-9CB7-B1F7BB0F29CE",
+        "deviceName": "iPhone 17 Pro Max",
+        "exportedFileName": "05-trainer-today.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "05-trainer-today_0_D2FE0511-12F8-4252-865F-1CBEC3B5E258.png",
+        "timestamp": 1788720628,
+        "originalExportedFileName": "814F1812-5529-4F2A-8A87-9F8A3D627EB9.png"
+      },
+      {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "A48B0A9A-44E6-49CA-9CB7-B1F7BB0F29CE",
+        "deviceName": "iPhone 17 Pro Max",
+        "exportedFileName": "04-calendar.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "04-calendar_0_E94FC8EC-5BD1-43BA-B9E2-171BC86A2433.png",
+        "timestamp": 1788720618.543,
+        "originalExportedFileName": "932A8078-2205-4157-B8CF-D4E9FD7B6E17.png"
+      },
+      {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "A48B0A9A-44E6-49CA-9CB7-B1F7BB0F29CE",
+        "deviceName": "iPhone 17 Pro Max",
+        "exportedFileName": "03-course-detail.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "03-course-detail_0_642CD9F0-A630-4078-A42E-9CB2A4151CF7.png",
+        "timestamp": 1788720614.241,
+        "originalExportedFileName": "B0CB7985-49CD-41D5-896A-271A11C911D7.png"
+      },
+      {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "A48B0A9A-44E6-49CA-9CB7-B1F7BB0F29CE",
+        "deviceName": "iPhone 17 Pro Max",
+        "exportedFileName": "02-courseware.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "02-courseware_0_54F5CAF7-8338-4382-9F85-82CCD442D7A7.png",
+        "timestamp": 1788720611.744,
+        "originalExportedFileName": "88DB74AA-CCA1-425B-8562-302DA41319C3.png"
+      },
+      {
+        "configurationName": "Test Scheme Action",
+        "deviceId": "A48B0A9A-44E6-49CA-9CB7-B1F7BB0F29CE",
+        "deviceName": "iPhone 17 Pro Max",
+        "exportedFileName": "01-learner-today.png",
+        "isAssociatedWithFailure": false,
+        "suggestedHumanReadableName": "01-learner-today_0_90F1A4B5-3134-407F-8C80-CA4B1E2B823A.png",
+        "timestamp": 1788720608.741,
+        "originalExportedFileName": "2B4781DD-BD2D-4D4C-87E4-817EB340F5F0.png"
+      }
+    ],
+    "testIdentifier": "NavigationTests/testLearnerAndTrainerNavigation()",
+    "testIdentifierURL": "test://com.apple.xcode/TertiaryLearning/TertiaryLearningUITests/NavigationTests/testLearnerAndTrainerNavigation"
+  }
+]

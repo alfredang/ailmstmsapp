@@ -27,14 +27,10 @@ The isolated `backend/` checkout contains the companion changes to AI-LMS-TMS. M
 
 `/api/mobile/auth` sends and verifies OTPs; `/me`, `/dashboard`, `/device` and `/delete-account` serve the native app. `/send-reminders` accepts only the configured machine API key. Read [the backend configuration guide](https://github.com/alfredang/AI-LMS-TMS/blob/main/docs/mobile-ios.md) for configuration and verification. The backend is a separate repository and is intentionally excluded from this app repository.
 
-## Skills
-
-Project `.agents/skills` and `.claude/skills` expose the imported user/Claude iOS design, submission and release skills. `skills-import.json` records their origins. Credentials and the credential-bootstrap subskill are intentionally excluded from imported copies.
-
 ## Release
 
-See `release/STATUS.md` for verified build, deployment and App Store Connect status. A successful archive does not mean the app has been submitted or approved. Do not commit `.env`, `.private/`, signing private keys or provisioning profiles.
+This repository contains the iOS app source only. Build output, App Store submission tooling and internal release records are intentionally excluded, as is the backend, which lives in its own repository. Never commit `.env`, signing keys or provisioning profiles.
 
 ## Preview
 
-![Learner dashboard](release/screenshots/iphone/01-learner-today.png)
+![Learner dashboard](docs/screenshots/iphone/01-learner-today.png)
