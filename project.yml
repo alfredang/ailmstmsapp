@@ -34,6 +34,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSCalendarsWriteOnlyAccessUsageDescription: Add a class you choose to your calendar.
         NSCalendarsUsageDescription: Add a class you choose to your calendar.
   TertiaryLearningTests:
