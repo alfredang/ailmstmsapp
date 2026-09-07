@@ -557,7 +557,7 @@ struct FeedbackView: View {
         Button("Send via WhatsApp") {
           var c = URLComponents(string: "https://wa.me/6588666375")!
           c.queryItems = [
-            URLQueryItem(name: "text", value: "Tertiary Learning: \(title)\n\(message)")
+            URLQueryItem(name: "text", value: "Tertiary LMS: \(title)\n\(message)")
           ]
           if let url = c.url { openURL(url) }
         }.disabled(title.isEmpty || message.isEmpty)

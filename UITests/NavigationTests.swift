@@ -4,6 +4,7 @@ final class NavigationTests:XCTestCase {
  override func setUp(){continueAfterFailure=false;app.launch()}
  func capture(_ name:String){let a=XCTAttachment(screenshot:app.screenshot());a.name=name;a.lifetime = .keepAlways;add(a)}
  func testLearnerAndTrainerNavigation(){
+  XCTAssertTrue(app.navigationBars["Tertiary LMS"].waitForExistence(timeout:15))
   let demo=app.buttons["demo"];XCTAssertTrue(demo.waitForExistence(timeout:15));demo.tap();app.buttons["Learner demo"].tap()
   XCTAssertTrue(app.staticTexts["Hello, Jamie."].waitForExistence(timeout:10));capture("01-learner-today")
   app.buttons["Courseware"].firstMatch.tap();XCTAssertTrue(app.staticTexts["Build practical AI workflows"].waitForExistence(timeout:10));capture("02-courseware")

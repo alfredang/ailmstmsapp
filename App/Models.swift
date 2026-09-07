@@ -86,5 +86,5 @@ enum Theme {
         : UIColor(red: 0.00, green: 0.40, blue: 0.43, alpha: 1)
     })
   static let hero = Color(red: 0.00, green: 0.42, blue: 0.45)
-  static let name = "Tertiary Learning"
+  static let name = "Tertiary LMS"
 }

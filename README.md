@@ -1,4 +1,4 @@
-# Tertiary Learning — native iOS app
+# Tertiary LMS — native iOS app
 
 A SwiftUI iPhone and iPad companion for [AI-LMS-TMS](https://github.com/alfredang/AI-LMS-TMS), restricted to registered learners and trainers.
 

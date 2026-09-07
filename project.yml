@@ -8,7 +8,7 @@ settings:
     SWIFT_VERSION: '5.0'
     DEVELOPMENT_TEAM: GU9WTSTX9M
     MARKETING_VERSION: '1.0'
-    CURRENT_PROJECT_VERSION: '1'
+    CURRENT_PROJECT_VERSION: '3'
     CODE_SIGN_STYLE: Automatic
 targets:
   TertiaryLearning:
@@ -29,7 +29,9 @@ targets:
     info:
       path: App/Support/Info.plist
       properties:
-        CFBundleDisplayName: Tertiary Learning
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleDisplayName: Tertiary LMS
         CFBundleIconName: AppIcon
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
