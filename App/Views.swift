@@ -16,42 +16,54 @@ struct RootView: View {
   @EnvironmentObject var store: Store
   @Environment(\.scenePhase) var phase
   var body: some View {
-    Group { if store.user != nil { MainView() } else { LoginView() } }
-      .alert(
-        "Learning portal",
-        isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })
-      ) {
-        Button("OK") { store.error = nil }
-      } message: {
-        Text(store.error ?? "")
+    Group {
+      if store.user != nil {
+        if ProcessInfo.processInfo.environment["START_COURSE_DETAIL"] == "1",
+          let course = store.dashboard.courses.first
+        {
+          NavigationStack { CourseDetail(course: course) }
+        } else {
+          MainView()
+        }
+      } else {
+        LoginView()
       }
-      .onReceive(NotificationCenter.default.publisher(for: .sessionExpired)) { _ in
-        store.clear()
-        store.error = "Your session expired. Please sign in again."
+    }
+    .alert(
+      "Learning portal",
+      isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })
+    ) {
+      Button("OK") { store.error = nil }
+    } message: {
+      Text(store.error ?? "")
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .sessionExpired)) { _ in
+      store.clear()
+      store.error = "Your session expired. Please sign in again."
+    }
+    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pushError"))) {
+      note in store.error = note.object as? String
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .openClass)) { note in
+      Task {
+        await store.refresh()
+        store.selectedTab = 2
+        if let id = note.object as? String,
+          let session = store.dashboard.sessions.first(where: { $0.id == id }),
+          let date = session.start
+        {
+          store.selectedDate = date
+        }
       }
-      .onReceive(NotificationCenter.default.publisher(for: Notification.Name("pushError"))) {
-        note in store.error = note.object as? String
-      }
-      .onReceive(NotificationCenter.default.publisher(for: .openClass)) { note in
+    }
+    .onChange(of: phase) { _, value in
+      if value == .active && store.user != nil {
         Task {
           await store.refresh()
-          store.selectedTab = 2
-          if let id = note.object as? String,
-            let session = store.dashboard.sessions.first(where: { $0.id == id }),
-            let date = session.start
-          {
-            store.selectedDate = date
-          }
+          await store.updateNotificationStatus()
         }
       }
-      .onChange(of: phase) { _, value in
-        if value == .active && store.user != nil {
-          Task {
-            await store.refresh()
-            await store.updateNotificationStatus()
-          }
-        }
-      }
+    }
   }
 }
 struct LoginView: View {
@@ -65,13 +77,13 @@ struct LoginView: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 24) {
-          Image(systemName: "graduationcap.fill").font(.system(size: 52)).foregroundStyle(
-            Theme.accent
+          AcademyHeader()
+            .padding(.top, 32)
+          Text("Your academy day,\nready when you are.").font(.largeTitle.bold())
+          Text(
+            "Secure access to the Tertiary courses, teaching kits and Singapore class sessions assigned to you."
           )
-          .padding(.top, 40)
-          Text("Your learning.\nAll in one place.").font(.largeTitle.bold())
-          Text("Course materials, class schedules and timely reminders for learners and trainers.")
-            .foregroundStyle(.secondary)
+          .foregroundStyle(.secondary)
           VStack(alignment: .leading, spacing: 16) {
             Text("Sign in with email").font(.title2.bold())
             TextField("Registered email address", text: $email).textContentType(.emailAddress)
@@ -111,9 +123,12 @@ struct LoginView: View {
             }
           }.padding(20).background(
             Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
-          Text(
-            "Use the email registered with your training provider. Only learner and trainer roles are available in this app."
-          ).font(.footnote).foregroundStyle(.secondary)
+          HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "checkmark.shield.fill").foregroundStyle(Theme.brandBlue)
+            Text(
+              "This is Tertiary Infotech Academy's first-party learning workspace. Sign-in and course access are verified by the academy's own Tertiary LMS."
+            ).font(.footnote).foregroundStyle(.secondary)
+          }
           Menu("Explore sample app") {
             Button("Learner demo") { store.openDemo("learner") }
             Button("Trainer demo") { store.openDemo("trainer") }
@@ -151,7 +166,9 @@ struct MainView: View {
         NavigationStack { HomeView() }.tabItem { Label("Today", systemImage: "sun.max.fill") }.tag(
           0)
         NavigationStack { CoursesView() }.tabItem {
-          Label("Courseware", systemImage: "books.vertical.fill")
+          Label(
+            store.role == "trainer" ? "Teaching Kit" : "My Learning",
+            systemImage: "person.text.rectangle.fill")
         }.tag(1)
         NavigationStack { CalendarView() }.tabItem { Label("Calendar", systemImage: "calendar") }
           .tag(
@@ -168,6 +185,7 @@ struct HomeView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
+        AcademyHeader(compact: true)
         VStack(alignment: .leading, spacing: 10) {
           Text(store.role == "trainer" ? "READY TO INSPIRE" : "KEEP LEARNING").font(.caption.bold())
             .tracking(2)
@@ -183,6 +201,7 @@ struct HomeView: View {
               colors: [Theme.hero, Color(red: 0.04, green: 0.24, blue: 0.32)],
               startPoint: .topLeading,
               endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 28))
+        RoleWorkspaceCard()
         HStack {
           Stat(value: "\(store.dashboard.courses.count)", label: "Courses", icon: "books.vertical")
           Stat(value: "\(store.upcoming.count)", label: "Upcoming classes", icon: "calendar")
@@ -275,6 +294,24 @@ struct CoursesView: View {
   }
   var body: some View {
     List {
+      Section {
+        VStack(alignment: .leading, spacing: 10) {
+          AcademyHeader(compact: true)
+          Text(
+            store.role == "trainer"
+              ? "Your assigned teaching kits" : "Your assigned learning journey"
+          )
+          .font(.title2.bold())
+          Text(
+            store.role == "trainer"
+              ? "Trainer-only slides, learner materials and class sessions come directly from Tertiary LMS."
+              : "Open your academy-published resources and keep track of what you have explored on this device."
+          )
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 8)
+      }
       if filtered.isEmpty {
         ContentUnavailableView(
           "No courses found", systemImage: "books.vertical",
@@ -291,11 +328,13 @@ struct CoursesView: View {
             Text("\(c.startDate ?? "Dates to be confirmed") · \(c.format ?? "Class")").font(
               .caption
             ).foregroundStyle(.secondary)
+            JourneyProgress(course: c)
           }.padding(.vertical, 12)
         }
       }
-    }.navigationTitle("Courseware").searchable(text: $query, prompt: "Find your course").refreshable
-    { await store.refresh() }
+    }.navigationTitle(store.role == "trainer" ? "Teaching Kit" : "My Learning").searchable(
+      text: $query, prompt: "Find your course"
+    ).refreshable { await store.refresh() }
   }
 }
 struct CourseDetail: View {
@@ -307,15 +346,18 @@ struct CourseDetail: View {
         Text(course.title).font(.title2.bold())
         LabeledContent("Course code", value: course.code ?? "—")
         LabeledContent("Delivery", value: course.format ?? "—")
+        JourneyProgress(course: course)
       }
-      Section("Learning materials") {
-        MaterialLink(title: "Slides", icon: "rectangle.on.rectangle", raw: course.slidesURL)
-        MaterialLink(title: "Learner guide", icon: "book", raw: course.guideURL)
-        MaterialLink(title: "Labs & activities", icon: "laptopcomputer", raw: course.activitiesURL)
-        if store.role == "trainer" {
-          MaterialLink(
-            title: "Trainer slides", icon: "person.crop.rectangle", raw: course.trainerSlidesURL)
+      Section {
+        ForEach(course.materials(for: store.role)) { material in
+          TrackedMaterialLink(courseID: course.id, material: material)
         }
+      } header: {
+        Text(store.role == "trainer" ? "Academy teaching kit" : "Academy learning kit")
+      } footer: {
+        Text(
+          "Material availability and role permissions are controlled by Tertiary LMS. The opened count is stored securely on this device."
+        )
       }
       Section("Class sessions") {
         ForEach(store.dashboard.sessions.filter { $0.courseID == course.id }) { s in
@@ -353,6 +395,44 @@ struct MaterialLink: View {
       }.sheet(isPresented: $showing) { Browser(url: url).ignoresSafeArea() }
     } else {
       Label("\(title) · not published yet", systemImage: icon).foregroundStyle(.secondary)
+    }
+  }
+}
+struct TrackedMaterialLink: View {
+  @EnvironmentObject var store: Store
+  let courseID: String
+  let material: CourseMaterial
+  @State var showing = false
+
+  var url: URL? {
+    guard let raw = material.rawURL, !raw.isEmpty,
+      let url = URL(string: raw, relativeTo: API.shared.base)?.absoluteURL, url.scheme == "https"
+    else { return nil }
+    return url
+  }
+
+  var body: some View {
+    if let url {
+      Button {
+        store.markMaterialOpened(courseID: courseID, materialID: material.id)
+        showing = true
+      } label: {
+        HStack {
+          Label(material.title, systemImage: material.symbol)
+          Spacer()
+          if store.hasOpened(courseID: courseID, materialID: material.id) {
+            Label("Opened", systemImage: "checkmark.circle.fill")
+              .font(.caption)
+              .foregroundStyle(Theme.accent)
+          } else {
+            Text("Ready").font(.caption).foregroundStyle(.secondary)
+          }
+        }
+      }
+      .sheet(isPresented: $showing) { Browser(url: url).ignoresSafeArea() }
+    } else {
+      Label("\(material.title) · not published yet", systemImage: material.symbol)
+        .foregroundStyle(.secondary)
     }
   }
 }
@@ -572,9 +652,10 @@ struct AboutView: View {
   var body: some View {
     List {
       Section(Theme.name) {
+        AcademyHeader(compact: true)
         Label("Learning, in your pocket", systemImage: "graduationcap.fill").font(.headline)
         Text(
-          "Access your assigned courseware, plan your classes and receive reminders. Built for learners and trainers using the Tertiary learning portal."
+          "The official Tertiary Infotech Academy workspace for academy-assigned courseware, role-specific teaching kits, Singapore class planning and reminders."
         )
       }
       Section("Developer") {

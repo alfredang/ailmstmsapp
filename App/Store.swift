@@ -9,8 +9,9 @@ import UserNotifications
   @Published var error: String?
   @Published var demo = false
   @Published var notifications = false
-  @Published var selectedTab = 0
+  @Published var selectedTab = Int(ProcessInfo.processInfo.environment["START_TAB"] ?? "0") ?? 0
   @Published var selectedDate = Date()
+  @Published private(set) var openedMaterials: Set<String> = []
   var roles: [String] { user?.roles.filter { ["learner", "trainer"].contains($0) } ?? [] }
   var upcoming: [ClassSession] {
     dashboard.sessions.filter { ($0.end ?? $0.start ?? .distantPast) >= Date() }.sorted {
@@ -34,11 +35,18 @@ import UserNotifications
       user = reply.data.user
       role = allowed
       demo = false
+      loadLearningProgress()
       await refresh()
       await updateNotificationStatus()
     } catch { self.error = error.localizedDescription }
   }
   func restore() async {
+    if let role = ProcessInfo.processInfo.environment["DEMO_ROLE"],
+      ["learner", "trainer"].contains(role)
+    {
+      openDemo(role)
+      return
+    }
     guard Keychain.read() != nil else { return }
     busy = true
     defer { busy = false }
@@ -56,6 +64,7 @@ import UserNotifications
       }
       user = reply.data.user
       role = allowed
+      loadLearningProgress()
       await refresh()
       await updateNotificationStatus()
     } catch {
@@ -90,6 +99,7 @@ import UserNotifications
     user = nil
     dashboard = Dashboard(courses: [], sessions: [])
     demo = false
+    openedMaterials = []
     notifications = false
     selectedTab = 0
     UNUserNotificationCenter.current().removeAllDeliveredNotifications()
@@ -102,6 +112,50 @@ import UserNotifications
       fullName: role == "trainer" ? "Alex Tan" : "Jamie Lim", role: role,
       roles: ["learner", "trainer"])
     dashboard = Sample.data(role: role)
+    loadLearningProgress()
+  }
+
+  func materialKey(courseID: String, materialID: String) -> String {
+    "\(courseID)::\(materialID)"
+  }
+
+  func markMaterialOpened(courseID: String, materialID: String) {
+    openedMaterials.insert(materialKey(courseID: courseID, materialID: materialID))
+    saveLearningProgress()
+  }
+
+  func hasOpened(courseID: String, materialID: String) -> Bool {
+    openedMaterials.contains(materialKey(courseID: courseID, materialID: materialID))
+  }
+
+  func openedCount(for course: Course) -> Int {
+    course.materials(for: role).filter {
+      $0.isPublished && hasOpened(courseID: course.id, materialID: $0.id)
+    }.count
+  }
+
+  func publishedCount(for course: Course) -> Int {
+    course.materials(for: role).filter(\.isPublished).count
+  }
+
+  private var progressAccount: String { "learning-progress-\(user?.id ?? "signed-out")" }
+
+  private func loadLearningProgress() {
+    guard let value = Keychain.read(account: progressAccount),
+      let data = value.data(using: .utf8),
+      let keys = try? JSONDecoder().decode([String].self, from: data)
+    else {
+      openedMaterials = []
+      return
+    }
+    openedMaterials = Set(keys)
+  }
+
+  private func saveLearningProgress() {
+    guard let data = try? JSONEncoder().encode(Array(openedMaterials).sorted()),
+      let value = String(data: data, encoding: .utf8)
+    else { return }
+    try? Keychain.save(value, account: progressAccount)
   }
   func updateNotificationStatus() async {
     let s = await UNUserNotificationCenter.current().notificationSettings()
@@ -124,12 +178,14 @@ import UserNotifications
   }
   func deleteAccount() async {
     if demo {
+      Keychain.clear(account: progressAccount)
       clear()
       return
     }
     do {
       let _: EmptyReply = try await API.shared.request(
         "mobile/delete-account", method: "POST", body: ["confirmation": "DELETE"])
+      Keychain.clear(account: progressAccount)
       clear()
     } catch { self.error = error.localizedDescription }
   }

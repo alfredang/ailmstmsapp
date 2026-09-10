@@ -30,6 +30,33 @@ struct Course: Codable, Identifiable {
   let guideURL: String?
   let activitiesURL: String?
   let trainerSlidesURL: String?
+
+  func materials(for role: String) -> [CourseMaterial] {
+    var items = [
+      CourseMaterial(
+        id: "slides", title: "Learner slides", symbol: "rectangle.on.rectangle", rawURL: slidesURL),
+      CourseMaterial(
+        id: "guide", title: "Learner Guide", symbol: "book.closed.fill", rawURL: guideURL),
+      CourseMaterial(
+        id: "activities", title: "Labs & activities", symbol: "laptopcomputer",
+        rawURL: activitiesURL),
+    ]
+    if role == "trainer" {
+      items.insert(
+        CourseMaterial(
+          id: "trainer-slides", title: "Trainer slides", symbol: "person.crop.rectangle",
+          rawURL: trainerSlidesURL),
+        at: 0)
+    }
+    return items
+  }
+}
+struct CourseMaterial: Identifiable {
+  let id: String
+  let title: String
+  let symbol: String
+  let rawURL: String?
+  var isPublished: Bool { rawURL?.isEmpty == false }
 }
 struct ClassSession: Codable, Identifiable {
   let id: String
@@ -86,5 +113,7 @@ enum Theme {
         : UIColor(red: 0.00, green: 0.40, blue: 0.43, alpha: 1)
     })
   static let hero = Color(red: 0.00, green: 0.42, blue: 0.45)
+  static let brandBlue = Color(red: 0.04, green: 0.24, blue: 0.56)
+  static let brandNavy = Color(red: 0.02, green: 0.11, blue: 0.28)
   static let name = "Tertiary LMS"
 }

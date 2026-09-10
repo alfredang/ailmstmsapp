@@ -11,6 +11,7 @@
 		79FD44F453E060A99302AEB2 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */; };
 		8213991C3874646E302C8288 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A40E655F36DF22972348D /* Store.swift */; };
 		84E7527141B343395614BE4B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 27B244360A87BC0578B8D564 /* Assets.xcassets */; };
+		A650C0D63CFCAF56A8867F4E /* LearningWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = F982FEB7BE829D8AD7F551D5 /* LearningWorkspace.swift */; };
 		A75670556475EC4386616704 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1ECC1C8053A38567746CCF51 /* PrivacyInfo.xcprivacy */; };
 		B4B84562989433C5F5B678E7 /* NavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45994CB19E8D1729BF3A294E /* NavigationTests.swift */; };
 		EA4FB78C65E71212EE22F6EA /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564D0236323E1BA03FD218E1 /* Views.swift */; };
@@ -51,6 +52,7 @@
 		B66CFBC905EDC58985302E16 /* Debug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Debug.entitlements; sourceTree = "<group>"; };
 		C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		EDC25E3783839C5200DC519B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		F982FEB7BE829D8AD7F551D5 /* LearningWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningWorkspace.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -70,6 +72,7 @@
 			children = (
 				A236E80D7C4204042E587CA2 /* API.swift */,
 				27B244360A87BC0578B8D564 /* Assets.xcassets */,
+				F982FEB7BE829D8AD7F551D5 /* LearningWorkspace.swift */,
 				C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */,
 				580FD70CFDCBB4F3337E5E14 /* Sample.swift */,
 				629A40E655F36DF22972348D /* Store.swift */,
@@ -235,6 +238,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EA61A948CC1EAC9341BD3A22 /* API.swift in Sources */,
+				A650C0D63CFCAF56A8867F4E /* LearningWorkspace.swift in Sources */,
 				79FD44F453E060A99302AEB2 /* Models.swift in Sources */,
 				FD415AD0912017205EF7839C /* Sample.swift in Sources */,
 				8213991C3874646E302C8288 /* Store.swift in Sources */,
@@ -361,7 +365,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = GU9WTSTX9M;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -456,7 +460,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = GU9WTSTX9M;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

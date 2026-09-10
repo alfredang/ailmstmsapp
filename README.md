@@ -5,6 +5,8 @@ A SwiftUI iPhone and iPad companion for [AI-LMS-TMS](https://github.com/alfredan
 - Email OTP with single-use, expiring codes and server-side attempt limits.
 - Keychain session storage and server-side logout.
 - Assigned courseware, learner guides, activities and trainer-only slides.
+- A role-specific Learning Passport / Session Command Centre tied to academy assignments.
+- Secure on-device tracking of which learner or trainer materials have been opened.
 - Singapore-time class calendar and Apple Calendar export.
 - APNs reminders three days and one day before each published class session.
 - Native Feedback, About, notification settings and account deletion.

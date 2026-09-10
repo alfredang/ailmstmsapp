@@ -1,68 +1,20 @@
-[
-  {
-    "attachments": [
-      {
-        "configurationName": "Test Scheme Action",
-        "deviceId": "5CE8993B-7E38-40B3-A248-D6F9F376A3BC",
-        "deviceName": "Tertiary Learning QA iPad",
-        "exportedFileName": "06-trainer-materials.png",
-        "isAssociatedWithFailure": false,
-        "suggestedHumanReadableName": "06-trainer-materials_0_255530AE-1897-4D67-92D7-E8CF3FD52518.png",
-        "timestamp": 1788720722.828,
-        "originalExportedFileName": "555B0B2A-F205-4FB0-A544-5616D53D6E08.png"
-      },
-      {
-        "configurationName": "Test Scheme Action",
-        "deviceId": "5CE8993B-7E38-40B3-A248-D6F9F376A3BC",
-        "deviceName": "Tertiary Learning QA iPad",
-        "exportedFileName": "05-trainer-today.png",
-        "isAssociatedWithFailure": false,
-        "suggestedHumanReadableName": "05-trainer-today_0_F515CA9B-0B9A-4E4A-8205-53086E6B3468.png",
-        "timestamp": 1788720718.283,
-        "originalExportedFileName": "73E83414-6A43-410E-B3E7-764A9F529407.png"
-      },
-      {
-        "configurationName": "Test Scheme Action",
-        "deviceId": "5CE8993B-7E38-40B3-A248-D6F9F376A3BC",
-        "deviceName": "Tertiary Learning QA iPad",
-        "exportedFileName": "04-calendar.png",
-        "isAssociatedWithFailure": false,
-        "suggestedHumanReadableName": "04-calendar_0_95F10528-D6F2-4232-9D00-5E49F0502773.png",
-        "timestamp": 1788720707.931,
-        "originalExportedFileName": "9ABE18A1-B5D7-4B69-A24E-43EE127F839F.png"
-      },
-      {
-        "configurationName": "Test Scheme Action",
-        "deviceId": "5CE8993B-7E38-40B3-A248-D6F9F376A3BC",
-        "deviceName": "Tertiary Learning QA iPad",
-        "exportedFileName": "03-course-detail.png",
-        "isAssociatedWithFailure": false,
-        "suggestedHumanReadableName": "03-course-detail_0_493362A9-2A71-4904-B71B-DC135739F6A9.png",
-        "timestamp": 1788720703.498,
-        "originalExportedFileName": "CE38E2F7-70E4-4470-BC2F-558F11AD25DD.png"
-      },
-      {
-        "configurationName": "Test Scheme Action",
-        "deviceId": "5CE8993B-7E38-40B3-A248-D6F9F376A3BC",
-        "deviceName": "Tertiary Learning QA iPad",
-        "exportedFileName": "02-courseware.png",
-        "isAssociatedWithFailure": false,
-        "suggestedHumanReadableName": "02-courseware_0_F8DC53BF-CF9A-4916-828D-C095C881BB01.png",
-        "timestamp": 1788720700.896,
-        "originalExportedFileName": "B362AF32-E4AC-4BAB-AD4C-33799D34AF87.png"
-      },
-      {
-        "configurationName": "Test Scheme Action",
-        "deviceId": "5CE8993B-7E38-40B3-A248-D6F9F376A3BC",
-        "deviceName": "Tertiary Learning QA iPad",
-        "exportedFileName": "01-learner-today.png",
-        "isAssociatedWithFailure": false,
-        "suggestedHumanReadableName": "01-learner-today_0_01DD7C6D-879A-4DB1-BEF7-787F7DE0F875.png",
-        "timestamp": 1788720697.559,
-        "originalExportedFileName": "3C045532-E6C1-4385-8979-B657045C326A.png"
-      }
-    ],
-    "testIdentifier": "NavigationTests/testLearnerAndTrainerNavigation()",
-    "testIdentifierURL": "test://com.apple.xcode/TertiaryLearning/TertiaryLearningUITests/NavigationTests/testLearnerAndTrainerNavigation"
-  }
-]
+{
+  "bundleId": "com.tertiaryinfotech.ailmstms",
+  "version": "1.0",
+  "build": "6",
+  "captureMethod": "xcrun simctl io screenshot",
+  "device": {
+    "name": "iPad Pro 13-inch (M5)",
+    "id": "ED0A2938-5449-4710-8EFF-0FE0FF497E07",
+    "os": "iOS 26.2",
+    "pixels": "2064x2752"
+  },
+  "screens": [
+    "01-learner-today.png",
+    "02-courseware.png",
+    "03-course-detail.png",
+    "04-calendar.png",
+    "05-trainer-today.png",
+    "06-trainer-materials.png"
+  ]
+}

@@ -19,4 +19,10 @@ final class ModelTests: XCTestCase {
     XCTAssertTrue(d.courses.allSatisfy { $0.guideURL != nil })
     XCTAssertTrue(d.sessions.allSatisfy { $0.end! > $0.start! })
   }
+  func testRoleSpecificAcademyMaterials() {
+    let course = Sample.data(role: "learner").courses[0]
+    XCTAssertEqual(course.materials(for: "learner").map(\.id), ["slides", "guide", "activities"])
+    XCTAssertEqual(course.materials(for: "trainer").first?.id, "trainer-slides")
+    XCTAssertTrue(course.materials(for: "trainer").allSatisfy(\.isPublished))
+  }
 }
