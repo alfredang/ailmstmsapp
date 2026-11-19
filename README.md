@@ -1,16 +1,17 @@
-# Tertiary LMS — native iOS app
+# TIA TMS — native iOS app
 
-A SwiftUI iPhone and iPad companion for [AI-LMS-TMS](https://github.com/alfredang/AI-LMS-TMS), restricted to registered learners and trainers.
+A SwiftUI iPhone and iPad app for [AI-LMS-TMS](https://github.com/alfredang/AI-LMS-TMS), restricted to registered learners and trainers of Tertiary Infotech Academy.
 
-- Email OTP with single-use, expiring codes and server-side attempt limits.
-- Keychain session storage and server-side logout.
-- Assigned courseware, learner guides, activities and trainer-only slides.
-- A role-specific Learning Passport / Session Command Centre tied to academy assignments.
-- Secure on-device tracking of which learner or trainer materials have been opened.
-- Singapore-time class calendar and Apple Calendar export.
-- APNs reminders three days and one day before each published class session.
+- Sign in with an email code or the portal password; Keychain session storage and server-side logout.
+- Classes and a Singapore-time calendar, with Apple Calendar export.
+- Courseware for each class; PDFs (and Google files that export as PDF) open inside the app.
+- Attendance: learners scan the trainer's class QR code; trainers show the QR code or mark attendance manually; SSG e-attendance opens on MySkillsFuture.
+- Assessments: learners submit files for published assessments; trainers record Competent / Not Yet Competent.
+- Course feedback form and the TRAQOM survey link.
+- Profile editing and a light/dark theme saved to the user's profile.
+- Reminders three days and one day before class (APNs) and on the morning of class (on device).
 - Native Feedback, About, notification settings and account deletion.
-- Clearly labelled sample learner/trainer experiences for App Review.
+- Clearly labelled sample learner/trainer experiences for App Review, covering every screen.
 
 ## Build
 
@@ -27,7 +28,7 @@ xcodebuild -project TertiaryLearning.xcodeproj -scheme TertiaryLearning -destina
 
 The isolated `backend/` checkout contains the companion changes to AI-LMS-TMS. Mobile routes derive identity from a verified server-side session and validate the selected role. No user IDs from the device are trusted for data access.
 
-`/api/mobile/auth` sends and verifies OTPs; `/me`, `/dashboard`, `/device` and `/delete-account` serve the native app. `/send-reminders` accepts only the configured machine API key. Read [the backend configuration guide](https://github.com/alfredang/AI-LMS-TMS/blob/main/docs/mobile-ios.md) for configuration and verification. The backend is a separate repository and is intentionally excluded from this app repository.
+`/api/mobile/auth` and `/login` sign users in; `/me`, `/dashboard`, `/class`, `/attendance`, `/assessments`, `/feedback`, `/profile`, `/device` and `/delete-account` serve the native app (contract: `docs/mobile-app-api.md` in the backend). `/send-reminders` accepts only the configured machine API key. Read [the backend configuration guide](https://github.com/alfredang/AI-LMS-TMS/blob/main/docs/mobile-ios.md) for configuration and verification. The backend is a separate repository and is intentionally excluded from this app repository.
 
 ## Release
 

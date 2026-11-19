@@ -122,7 +122,7 @@ struct RoleWorkspaceCard: View {
         .accessibilityIdentifier("workspace-kit")
       } else {
         Text(
-          "Your academy-assigned courses and class sessions will appear here after they are published in Tertiary LMS."
+          "Your academy-assigned courses and class sessions will appear here after your academy publishes them."
         )
         .font(.subheadline)
         .foregroundStyle(.white.opacity(0.9))

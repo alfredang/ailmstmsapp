@@ -1,0 +1,49 @@
+{
+ "data": {
+  "id": "31000000-0000-0000-0000-000000000001",
+  "runCode": "APPTEST-RUN",
+  "title": "App test course",
+  "code": "APPTEST",
+  "startDate": "2026-11-19",
+  "endDate": "2026-11-19",
+  "format": "Physical",
+  "classStatus": "Confirmed",
+  "meetingURL": null,
+  "venue": null,
+  "materials": [
+   {
+    "id": "slides",
+    "title": "Learner slides",
+    "url": "https://example.test/slides"
+   }
+  ],
+  "sessions": [
+   {
+    "id": "41000000-0000-0000-0000-000000000001",
+    "label": "Day 1 \u00b7 Thu 19 Nov \u00b7 AM",
+    "date": "2026-11-19",
+    "startTime": "09:00",
+    "endTime": "17:00",
+    "attendance": "absent"
+   }
+  ],
+  "traqomURL": "https://ssgtraqom.qualtrics.com/jfe/form/SV_3K9i7rTJ9OLsauW?Q_CHL=qr",
+  "ssgAttendanceURL": "https://www.myskillsfuture.gov.sg/api/take-attendance/RA123456",
+  "assessments": [
+   {
+    "type": "writtenAssessment",
+    "label": "Written Assessment",
+    "questionURL": "https://example.test/wa",
+    "published": true,
+    "submissions": []
+   }
+  ],
+  "assessmentStatus": null,
+  "traqomCompleted": false,
+  "feedback": {
+   "enabled": true,
+   "externalURL": null,
+   "submitted": false
+  }
+ }
+}

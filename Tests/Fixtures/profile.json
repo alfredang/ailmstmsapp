@@ -1,0 +1,15 @@
+{
+ "data": {
+  "id": "11000000-0000-0000-0000-000000000006",
+  "email": "app-classmate@example.test",
+  "fullName": "App classmate",
+  "pictureURL": null,
+  "theme": "system",
+  "phone": null,
+  "company": null,
+  "employmentStatus": null,
+  "linkedinURL": null,
+  "brandColor": "#3B82F6",
+  "academy": null
+ }
+}

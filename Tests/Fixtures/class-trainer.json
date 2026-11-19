@@ -1,0 +1,81 @@
+{
+ "data": {
+  "id": "31000000-0000-0000-0000-000000000001",
+  "runCode": "APPTEST-RUN",
+  "title": "App test course",
+  "code": "APPTEST",
+  "startDate": "2026-11-19",
+  "endDate": "2026-11-19",
+  "format": "Physical",
+  "classStatus": "Confirmed",
+  "meetingURL": null,
+  "venue": null,
+  "materials": [
+   {
+    "id": "trainer-slides",
+    "title": "Trainer slides",
+    "url": "https://example.test/trainer"
+   },
+   {
+    "id": "slides",
+    "title": "Learner slides",
+    "url": "https://example.test/slides"
+   },
+   {
+    "id": "lesson-plan",
+    "title": "Lesson Plan",
+    "url": "https://example.test/lp"
+   },
+   {
+    "id": "facilitator-guide",
+    "title": "Facilitator Guide",
+    "url": "https://example.test/fg"
+   }
+  ],
+  "sessions": [
+   {
+    "id": "41000000-0000-0000-0000-000000000001",
+    "label": "Day 1 \u00b7 Thu 19 Nov \u00b7 AM",
+    "date": "2026-11-19",
+    "startTime": "09:00",
+    "endTime": "17:00",
+    "presentCount": 1
+   }
+  ],
+  "traqomURL": "https://ssgtraqom.qualtrics.com/jfe/form/SV_3K9i7rTJ9OLsauW?Q_CHL=qr",
+  "ssgAttendanceURL": "https://www.myskillsfuture.gov.sg/spface/splogin/select-session?course-run-code=RA123456",
+  "assessments": [
+   {
+    "type": "writtenAssessment",
+    "label": "Written Assessment",
+    "questionURL": "https://example.test/wa",
+    "published": true,
+    "submissions": []
+   },
+   {
+    "type": "practicalExam",
+    "label": "Practical Performance",
+    "questionURL": "https://example.test/pp",
+    "published": false,
+    "submissions": []
+   }
+  ],
+  "roster": [
+   {
+    "enrolmentId": "f056e7b1-61e9-4880-a7e6-c918d37c2394",
+    "name": "App Learner Renamed",
+    "status": null,
+    "traqomCompleted": false,
+    "submissions": 0
+   },
+   {
+    "enrolmentId": "cd1f3d87-911b-400f-8ced-a4628afbc832",
+    "name": "App classmate",
+    "status": null,
+    "traqomCompleted": false,
+    "submissions": 0
+   }
+  ],
+  "feedbackCount": 0
+ }
+}

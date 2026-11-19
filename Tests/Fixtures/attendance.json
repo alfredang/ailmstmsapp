@@ -1,0 +1,19 @@
+{
+ "data": {
+  "checkinURL": "http://localhost:3004/checkin/b63ad86e7d3f4370aebefb01aad0f676",
+  "learners": [
+   {
+    "enrolmentId": "f056e7b1-61e9-4880-a7e6-c918d37c2394",
+    "name": "App Learner Renamed",
+    "isPresent": true,
+    "reason": ""
+   },
+   {
+    "enrolmentId": "cd1f3d87-911b-400f-8ced-a4628afbc832",
+    "name": "App classmate",
+    "isPresent": false,
+    "reason": "Medical leave"
+   }
+  ]
+ }
+}

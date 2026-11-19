@@ -8,7 +8,7 @@ settings:
     SWIFT_VERSION: '5.0'
     DEVELOPMENT_TEAM: GU9WTSTX9M
     MARKETING_VERSION: '1.0'
-    CURRENT_PROJECT_VERSION: '6'
+    CURRENT_PROJECT_VERSION: '7'
     CODE_SIGN_STYLE: Automatic
 targets:
   TertiaryLearning:
@@ -31,7 +31,7 @@ targets:
       properties:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleShortVersionString: $(MARKETING_VERSION)
-        CFBundleDisplayName: Tertiary LMS
+        CFBundleDisplayName: TIA TMS
         CFBundleIconName: AppIcon
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
@@ -39,6 +39,7 @@ targets:
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSCalendarsWriteOnlyAccessUsageDescription: Add a class you choose to your calendar.
         NSCalendarsUsageDescription: Add a class you choose to your calendar.
+        NSCameraUsageDescription: Scan the class QR code your trainer shows to check in to your session.
   TertiaryLearningTests:
     type: bundle.unit-test
     platform: iOS

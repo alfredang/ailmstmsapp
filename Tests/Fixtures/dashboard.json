@@ -1,0 +1,35 @@
+{
+ "courses": [
+  {
+   "id": "31000000-0000-0000-0000-000000000001",
+   "title": "App test course",
+   "code": "APPTEST",
+   "startDate": "2026-11-19",
+   "endDate": "2026-11-19",
+   "format": "Physical",
+   "meetingURL": null,
+   "venue": "",
+   "slidesURL": "https://example.test/slides",
+   "guideURL": null,
+   "activitiesURL": null,
+   "trainerSlidesURL": null,
+   "runCode": "APPTEST-RUN",
+   "classStatus": "Confirmed"
+  }
+ ],
+ "sessions": [
+  {
+   "id": "41000000-0000-0000-0000-000000000001",
+   "courseID": "31000000-0000-0000-0000-000000000001",
+   "title": "App test course",
+   "startDate": "20261119",
+   "endDate": null,
+   "startTime": "09:00",
+   "endTime": "17:00",
+   "subtitle": "Session 1",
+   "format": "Physical",
+   "meetingURL": null,
+   "venue": ""
+  }
+ ]
+}

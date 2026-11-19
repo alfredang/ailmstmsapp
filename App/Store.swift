@@ -12,6 +12,16 @@ import UserNotifications
   @Published var selectedTab = Int(ProcessInfo.processInfo.environment["START_TAB"] ?? "0") ?? 0
   @Published var selectedDate = Date()
   @Published private(set) var openedMaterials: Set<String> = []
+  @Published var profile: Profile?
+  /// Sample-mode state, so check-ins, submissions and grades made in the demo are visible.
+  var demoDetails: [String: ClassDetail] = [:]
+  var demoSheets: [String: AttendanceSheet] = [:]
+  @Published var mustChangePassword = false
+  /// "system", "light" or "dark". Follows the user's profile; cached so it applies at launch.
+  @Published var theme = UserDefaults.standard.string(forKey: "theme") ?? "system" {
+    didSet { UserDefaults.standard.set(theme, forKey: "theme") }
+  }
+  var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
   var roles: [String] { user?.roles.filter { ["learner", "trainer"].contains($0) } ?? [] }
   var upcoming: [ClassSession] {
     dashboard.sessions.filter { ($0.end ?? $0.start ?? .distantPast) >= Date() }.sorted {
@@ -37,8 +47,93 @@ import UserNotifications
       demo = false
       loadLearningProgress()
       await refresh()
+      await loadProfile()
       await updateNotificationStatus()
     } catch { self.error = error.localizedDescription }
+  }
+  func login(email: String, password: String) async {
+    busy = true
+    error = nil
+    defer { busy = false }
+    do {
+      struct PasswordReply: Decodable {
+        let data: Value
+        struct Value: Decodable {
+          let user: User
+          let token: String
+          let forcePasswordChange: Bool?
+        }
+      }
+      let reply: PasswordReply = try await API.shared.request(
+        "mobile/login", method: "POST", body: ["email": email, "password": password])
+      guard
+        let allowed = reply.data.user.roles.first(where: { ["learner", "trainer"].contains($0) })
+      else {
+        throw APIError(
+          message: "This app is for learners and trainers. Your account has neither role.")
+      }
+      try Keychain.save(reply.data.token)
+      mustChangePassword = reply.data.forcePasswordChange ?? false
+      user = reply.data.user
+      role = allowed
+      demo = false
+      loadLearningProgress()
+      await refresh()
+      await loadProfile()
+      await updateNotificationStatus()
+    } catch { self.error = error.localizedDescription }
+  }
+  /// Returns nil on success, or the message to show.
+  func changePassword(current: String, new: String) async -> String? {
+    if demo { return "Sample mode has no password to change." }
+    do {
+      let _: EmptyReply = try await API.shared.request(
+        "mobile/password", method: "POST",
+        body: ["currentPassword": current, "newPassword": new])
+      mustChangePassword = false
+      return nil
+    } catch { return error.localizedDescription }
+  }
+  func loadProfile() async {
+    if demo {
+      profile = Sample.profile(role: role, theme: theme)
+      return
+    }
+    do {
+      let reply: Reply<Profile> = try await API.shared.request("mobile/profile")
+      profile = reply.data
+      theme = reply.data.theme
+    } catch {
+      // The profile is optional for browsing classes; Account shows a retry.
+    }
+  }
+  /// Saves the given fields. Returns nil on success, or the message to show.
+  func saveProfile(_ fields: [String: Any]) async -> String? {
+    if demo {
+      if var copy = profile {
+        if let v = fields["fullName"] as? String { copy.fullName = v }
+        if let v = fields["phone"] as? String { copy.phone = v }
+        if let v = fields["company"] as? String { copy.company = v }
+        if let v = fields["employmentStatus"] as? String { copy.employmentStatus = v }
+        if let v = fields["linkedinURL"] as? String { copy.linkedinURL = v }
+        if let v = fields["theme"] as? String { copy.theme = v }
+        profile = copy
+      }
+      if let v = fields["theme"] as? String { theme = v }
+      return nil
+    }
+    do {
+      let reply: Reply<Profile> = try await API.shared.request(
+        "mobile/profile", method: "PATCH", body: fields)
+      profile = reply.data
+      theme = reply.data.theme
+      if let current = user, current.fullName != reply.data.fullName {
+        user = User(
+          id: current.id, email: current.email, fullName: reply.data.fullName, role: current.role,
+          roles: current.roles)
+      }
+      return nil
+    } catch { return error.localizedDescription }
   }
   func restore() async {
     if let role = ProcessInfo.processInfo.environment["DEMO_ROLE"],
@@ -66,6 +161,7 @@ import UserNotifications
       role = allowed
       loadLearningProgress()
       await refresh()
+      await loadProfile()
       await updateNotificationStatus()
     } catch {
       Keychain.clear()
@@ -80,6 +176,7 @@ import UserNotifications
     do {
       dashboard = try await API.shared.dashboard(role: role)
       error = nil
+      await ClassAlerts.schedule(for: upcoming, enabled: notifications)
     } catch { self.error = error.localizedDescription }
   }
   func signOut() async {
@@ -102,16 +199,25 @@ import UserNotifications
     openedMaterials = []
     notifications = false
     selectedTab = 0
+    profile = nil
+    demoDetails = [:]
+    demoSheets = [:]
+    mustChangePassword = false
+    theme = "system"
     UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+    UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
   }
   func openDemo(_ role: String) {
     demo = true
+    demoDetails = [:]
+    demoSheets = [:]
     self.role = role
     user = User(
       id: "demo", email: "sample@example.com",
       fullName: role == "trainer" ? "Alex Tan" : "Jamie Lim", role: role,
       roles: ["learner", "trainer"])
     dashboard = Sample.data(role: role)
+    profile = Sample.profile(role: role, theme: theme)
     loadLearningProgress()
   }
 
@@ -161,6 +267,7 @@ import UserNotifications
     let s = await UNUserNotificationCenter.current().notificationSettings()
     notifications = s.authorizationStatus == .authorized || s.authorizationStatus == .provisional
     if notifications && !demo { UIApplication.shared.registerForRemoteNotifications() }
+    if !demo { await ClassAlerts.schedule(for: upcoming, enabled: notifications) }
   }
   func enableNotifications() async {
     do {
@@ -248,5 +355,47 @@ import UserNotifications
         name: .openClass,
         object: response.notification.request.content.userInfo["sessionID"] as? String)
     }
+  }
+}
+
+/// On-device alerts for upcoming classes, in addition to the academy's push reminders:
+/// one on the morning of each class (08:00 Singapore time, or an hour before an earlier start).
+/// Rebuilt from the current class list each time, so cancelled or removed classes drop out.
+enum ClassAlerts {
+  static let prefix = "class-alert-"
+  static func schedule(for sessions: [ClassSession], enabled: Bool) async {
+    let center = UNUserNotificationCenter.current()
+    let old = await center.pendingNotificationRequests().map(\.identifier).filter {
+      $0.hasPrefix(prefix)
+    }
+    center.removePendingNotificationRequests(withIdentifiers: old)
+    guard enabled else { return }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "Asia/Singapore")!
+    for session in sessions.prefix(30) {
+      guard session.startTime != nil, let start = session.start,
+        let fire = fireDate(for: start, calendar: calendar), fire > Date()
+      else { continue }
+      let content = UNMutableNotificationContent()
+      content.title = "Class today: \(session.title)"
+      content.body =
+        "\(session.timeLabel)–\(session.endTimeLabel) SGT · "
+        + (session.venue?.isEmpty == false ? session.venue! : (session.format ?? "See class details"))
+      content.sound = .default
+      content.userInfo = ["sessionID": session.id]
+      let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+      var trigger = parts
+      trigger.timeZone = calendar.timeZone
+      try? await center.add(
+        UNNotificationRequest(
+          identifier: prefix + session.id, content: content,
+          trigger: UNCalendarNotificationTrigger(dateMatching: trigger, repeats: false)))
+    }
+  }
+  static func fireDate(for start: Date, calendar: Calendar) -> Date? {
+    guard let eight = calendar.date(bySettingHour: 8, minute: 0, second: 0, of: start) else {
+      return nil
+    }
+    return start > eight.addingTimeInterval(1800) ? eight : start.addingTimeInterval(-3600)
   }
 }
