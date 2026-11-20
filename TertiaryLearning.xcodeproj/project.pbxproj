@@ -8,7 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		07A488FA095A2A5EF43CBC65 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8031B41871EF04A072700BF6 /* ModelTests.swift */; };
+		254379F13345B591D5327842 /* quiz-result.json in Resources */ = {isa = PBXBuildFile; fileRef = C4ABBB9C8C9183B6FD6CF6AE /* quiz-result.json */; };
 		2F56F928040449D311A170CD /* dashboard.json in Resources */ = {isa = PBXBuildFile; fileRef = A242A88EEF2BD51AEDB5E859 /* dashboard.json */; };
+		3009EECB0D98662CA480DF12 /* quiz.json in Resources */ = {isa = PBXBuildFile; fileRef = 2156F7EDD00A1FA282431452 /* quiz.json */; };
 		5C0B51591AA5BBE632522CBA /* profile.json in Resources */ = {isa = PBXBuildFile; fileRef = 2F8B19992671DFB843B2492F /* profile.json */; };
 		79FD44F453E060A99302AEB2 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */; };
 		8213991C3874646E302C8288 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A40E655F36DF22972348D /* Store.swift */; };
@@ -17,11 +19,13 @@
 		A650C0D63CFCAF56A8867F4E /* LearningWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = F982FEB7BE829D8AD7F551D5 /* LearningWorkspace.swift */; };
 		A75670556475EC4386616704 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1ECC1C8053A38567746CCF51 /* PrivacyInfo.xcprivacy */; };
 		B4B84562989433C5F5B678E7 /* NavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45994CB19E8D1729BF3A294E /* NavigationTests.swift */; };
+		C2E16FC0D137FFEB9DACA11B /* quiz-first-attempt.json in Resources */ = {isa = PBXBuildFile; fileRef = 248910DFCF4D9B1E132B22A7 /* quiz-first-attempt.json */; };
 		CDB5C825BCDF08D3BF48D1B8 /* class-trainer.json in Resources */ = {isa = PBXBuildFile; fileRef = 8A2618B61D14ED65618D777C /* class-trainer.json */; };
 		E253026C6F8495987CF4F540 /* attendance.json in Resources */ = {isa = PBXBuildFile; fileRef = 8198AFA41FCE785D323CF56D /* attendance.json */; };
 		EA4FB78C65E71212EE22F6EA /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564D0236323E1BA03FD218E1 /* Views.swift */; };
 		EA61A948CC1EAC9341BD3A22 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = A236E80D7C4204042E587CA2 /* API.swift */; };
 		EA9F113385EFB9BE71B515C2 /* Classroom.swift in Sources */ = {isa = PBXBuildFile; fileRef = 119E90349B679B3D30AAB95D /* Classroom.swift */; };
+		F053C89B7174B988435FE7C5 /* Quiz.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BF6AC230D585BC3D3E0CAD /* Quiz.swift */; };
 		FB211069BFD7F76DE92C155A /* class-learner.json in Resources */ = {isa = PBXBuildFile; fileRef = BBEB0D55999644CDFF750447 /* class-learner.json */; };
 		FD415AD0912017205EF7839C /* Sample.swift in Sources */ = {isa = PBXBuildFile; fileRef = 580FD70CFDCBB4F3337E5E14 /* Sample.swift */; };
 /* End PBXBuildFile section */
@@ -47,6 +51,8 @@
 		035C8AA89E8A9C6E3927DB04 /* Release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Release.entitlements; sourceTree = "<group>"; };
 		119E90349B679B3D30AAB95D /* Classroom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Classroom.swift; sourceTree = "<group>"; };
 		1ECC1C8053A38567746CCF51 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		2156F7EDD00A1FA282431452 /* quiz.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = quiz.json; sourceTree = "<group>"; };
+		248910DFCF4D9B1E132B22A7 /* quiz-first-attempt.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "quiz-first-attempt.json"; sourceTree = "<group>"; };
 		27B244360A87BC0578B8D564 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2F8B19992671DFB843B2492F /* profile.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = profile.json; sourceTree = "<group>"; };
 		3F7018A337A62D4C8F68C568 /* TertiaryLearningTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = TertiaryLearningTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -64,7 +70,9 @@
 		B66CFBC905EDC58985302E16 /* Debug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Debug.entitlements; sourceTree = "<group>"; };
 		BBEB0D55999644CDFF750447 /* class-learner.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "class-learner.json"; sourceTree = "<group>"; };
 		BFC1431F6C2951AE40086F42 /* feedback.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = feedback.json; sourceTree = "<group>"; };
+		C4ABBB9C8C9183B6FD6CF6AE /* quiz-result.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "quiz-result.json"; sourceTree = "<group>"; };
 		C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		D2BF6AC230D585BC3D3E0CAD /* Quiz.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Quiz.swift; sourceTree = "<group>"; };
 		EDC25E3783839C5200DC519B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F982FEB7BE829D8AD7F551D5 /* LearningWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningWorkspace.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -89,6 +97,7 @@
 				119E90349B679B3D30AAB95D /* Classroom.swift */,
 				F982FEB7BE829D8AD7F551D5 /* LearningWorkspace.swift */,
 				C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */,
+				D2BF6AC230D585BC3D3E0CAD /* Quiz.swift */,
 				580FD70CFDCBB4F3337E5E14 /* Sample.swift */,
 				629A40E655F36DF22972348D /* Store.swift */,
 				564D0236323E1BA03FD218E1 /* Views.swift */,
@@ -106,6 +115,9 @@
 				A242A88EEF2BD51AEDB5E859 /* dashboard.json */,
 				BFC1431F6C2951AE40086F42 /* feedback.json */,
 				2F8B19992671DFB843B2492F /* profile.json */,
+				248910DFCF4D9B1E132B22A7 /* quiz-first-attempt.json */,
+				C4ABBB9C8C9183B6FD6CF6AE /* quiz-result.json */,
+				2156F7EDD00A1FA282431452 /* quiz.json */,
 			);
 			path = Fixtures;
 			sourceTree = "<group>";
@@ -261,6 +273,9 @@
 				2F56F928040449D311A170CD /* dashboard.json in Resources */,
 				82C032C7F634E05ED3DADEFC /* feedback.json in Resources */,
 				5C0B51591AA5BBE632522CBA /* profile.json in Resources */,
+				C2E16FC0D137FFEB9DACA11B /* quiz-first-attempt.json in Resources */,
+				254379F13345B591D5327842 /* quiz-result.json in Resources */,
+				3009EECB0D98662CA480DF12 /* quiz.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -284,6 +299,7 @@
 				EA9F113385EFB9BE71B515C2 /* Classroom.swift in Sources */,
 				A650C0D63CFCAF56A8867F4E /* LearningWorkspace.swift in Sources */,
 				79FD44F453E060A99302AEB2 /* Models.swift in Sources */,
+				F053C89B7174B988435FE7C5 /* Quiz.swift in Sources */,
 				FD415AD0912017205EF7839C /* Sample.swift in Sources */,
 				8213991C3874646E302C8288 /* Store.swift in Sources */,
 				EA4FB78C65E71212EE22F6EA /* Views.swift in Sources */,
@@ -409,7 +425,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = GU9WTSTX9M;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -423,7 +439,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -504,7 +520,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = GU9WTSTX9M;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -524,7 +540,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

@@ -7,6 +7,7 @@ A SwiftUI iPhone and iPad app for [AI-LMS-TMS](https://github.com/alfredang/AI-L
 - Courseware for each class; PDFs (and Google files that export as PDF) open inside the app.
 - Attendance: learners scan the trainer's class QR code; trainers show the QR code or mark attendance manually; SSG e-attendance opens on MySkillsFuture.
 - Assessments: learners submit files for published assessments; trainers record Competent / Not Yet Competent.
+- Class quizzes: scanning the trainer's quiz QR code (`https://lms-tms.tertiaryinfotech.com/quiz/<courseId>/<quizId>`) opens the quiz in the app through a universal link; one question at a time, then the marked result, with retake. A signed-out learner signs in first and the quiz opens straight after.
 - Course feedback form and the TRAQOM survey link.
 - Profile editing and a light/dark theme saved to the user's profile.
 - Reminders three days and one day before class (APNs) and on the morning of class (on device).
@@ -28,12 +29,19 @@ xcodebuild -project TertiaryLearning.xcodeproj -scheme TertiaryLearning -destina
 
 The isolated `backend/` checkout contains the companion changes to AI-LMS-TMS. Mobile routes derive identity from a verified server-side session and validate the selected role. No user IDs from the device are trusted for data access.
 
-`/api/mobile/auth` and `/login` sign users in; `/me`, `/dashboard`, `/class`, `/attendance`, `/assessments`, `/feedback`, `/profile`, `/device` and `/delete-account` serve the native app (contract: `docs/mobile-app-api.md` in the backend). `/send-reminders` accepts only the configured machine API key. Read [the backend configuration guide](https://github.com/alfredang/AI-LMS-TMS/blob/main/docs/mobile-ios.md) for configuration and verification. The backend is a separate repository and is intentionally excluded from this app repository.
+`/api/mobile/auth` and `/login` sign users in; `/me`, `/dashboard`, `/class`, `/attendance`, `/assessments`, `/feedback`, `/profile`, `/device` and `/delete-account` serve the native app (contract: `docs/mobile-app-api.md` in the backend). Class quizzes use the portal's `/api/courses/quiz` and `/api/courses/submit-quiz` with the same session token; the server marks the answers. The portal serves `/.well-known/apple-app-site-association` for `GU9WTSTX9M.com.tertiaryinfotech.ailmstms` (paths `/quiz/*`), matching the app's `applinks:lms-tms.tertiaryinfotech.com` entitlement. `/send-reminders` accepts only the configured machine API key. Read [the backend configuration guide](https://github.com/alfredang/AI-LMS-TMS/blob/main/docs/mobile-ios.md) for configuration and verification. The backend is a separate repository and is intentionally excluded from this app repository.
 
 ## Release
 
 This repository contains the iOS app source only. Build output, App Store submission tooling and internal release records are intentionally excluded, as is the backend, which lives in its own repository. Never commit `.env`, signing keys or provisioning profiles.
 
+## Release notes
+
+- **1.1 (8)**: Scan a quiz QR code to take class quizzes in the app.
+- **1.0 (7)**: Attendance, assessments, course feedback, in-app PDF courseware, profile and theme.
+
 ## Preview
 
 ![Learner dashboard](docs/screenshots/iphone/01-learner-today.png)
+
+![Class quiz](docs/screenshots/iphone/15-quiz-question.png)

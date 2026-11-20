@@ -10,6 +10,11 @@ import SwiftUI
     WindowGroup {
       RootView().environmentObject(store).tint(Theme.accent)
         .preferredColorScheme(store.colorScheme).task { await store.restore() }
+        // Quiz QR codes carry a universal link; the camera hands it to the app here.
+        .onOpenURL { store.handle(url: $0) }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+          if let url = activity.webpageURL { store.handle(url: url) }
+        }
     }
   }
 }
@@ -31,6 +36,14 @@ struct RootView: View {
       } else {
         LoginView()
       }
+    }
+    .sheet(
+      item: Binding(
+        get: { store.user != nil && !store.mustChangePassword ? store.pendingQuiz : nil },
+        set: { store.pendingQuiz = $0 })
+    ) { link in
+      QuizView(link: link) { store.pendingQuiz = nil }.environmentObject(store)
+        .tint(Theme.accent).preferredColorScheme(store.colorScheme).pageSizedSheet()
     }
     .alert(
       "TIA TMS",
@@ -89,6 +102,16 @@ struct LoginView: View {
             "Secure access to the Tertiary courses, teaching kits and Singapore class sessions assigned to you."
           )
           .foregroundStyle(.secondary)
+          if store.pendingQuiz != nil {
+            Label(
+              "Sign in to take your class quiz. It opens as soon as you are signed in.",
+              systemImage: "qrcode.viewfinder"
+            )
+            .font(.subheadline.weight(.medium)).padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+            .accessibilityIdentifier("quiz-pending")
+          }
           VStack(alignment: .leading, spacing: 16) {
             Text("Sign in").font(.title2.bold())
             Picker("Sign-in method", selection: $usePassword) {

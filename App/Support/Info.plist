@@ -29,7 +29,7 @@
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
 	<string>Add a class you choose to your calendar.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Scan the class QR code your trainer shows to check in to your session.</string>
+	<string>Scan the QR code your trainer shows to check in to your session or open a class quiz.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

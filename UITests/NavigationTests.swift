@@ -81,6 +81,11 @@ final class NavigationTests: XCTestCase {
     XCTAssertTrue(app.buttons["SSG e-attendance (Singpass)"].exists)
     capture("08-attendance-learner")
 
+    // The class quiz section opens the sample quiz.
+    reveal(app.buttons["sample-quiz"]).tap()
+    XCTAssertTrue(app.staticTexts["Question 1 of 3"].waitForExistence(timeout: 10))
+    app.buttons["quiz-close"].tap()
+
     // Assessment screen.
     reveal(app.staticTexts["Written Assessment"].firstMatch).tap()
     XCTAssertTrue(app.buttons["submit-file"].waitForExistence(timeout: 10))
@@ -132,5 +137,75 @@ final class NavigationTests: XCTestCase {
     reveal(app.buttons["grading"]).tap()
     XCTAssertTrue(app.staticTexts["Jamie Lim (sample)"].waitForExistence(timeout: 5))
     capture("14-trainer-grading")
+  }
+
+  /// A quiz QR code link: arrives while signed out, waits for sign-in, then the quiz opens.
+  /// Answers every question, checks the marked result, retakes, and sees the last score next time.
+  func testQuizLinkOpensQuizInSampleMode() {
+    let link = URL(
+      string: "https://lms-tms.tertiaryinfotech.com/quiz/3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b/sample-quiz")!
+    let demo = app.buttons["demo"]
+    XCTAssertTrue(demo.waitForExistence(timeout: 15))
+    app.open(link)
+    XCTAssertTrue(app.staticTexts["quiz-pending"].waitForExistence(timeout: 15))
+    capture("15-quiz-sign-in-first")
+    reveal(demo).tap()
+    app.buttons["Learner demo"].tap()
+
+    // First attempt: straight to question 1.
+    XCTAssertTrue(app.staticTexts["Question 1 of 3"].waitForExistence(timeout: 15))
+    XCTAssertFalse(app.buttons["quiz-next"].isEnabled)
+    app.buttons["quiz-option-1"].tap()
+    capture("16-quiz-question")
+    app.buttons["quiz-next"].tap()
+    XCTAssertTrue(app.staticTexts["Question 2 of 3"].waitForExistence(timeout: 5))
+    app.buttons["quiz-option-2"].tap()
+    app.buttons["quiz-next"].tap()
+    XCTAssertTrue(app.staticTexts["Question 3 of 3"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["quiz-next"].exists)
+    app.buttons["quiz-option-2"].tap()
+    app.buttons["quiz-submit"].tap()
+
+    // Result: 2 of 3, with the wrong one marked and its correct option shown.
+    XCTAssertTrue(app.staticTexts["2 / 3"].waitForExistence(timeout: 10))
+    capture("17-quiz-result")
+    XCTAssertTrue(reveal(app.staticTexts["Question 2 · Incorrect"]).exists)
+    XCTAssertTrue(app.staticTexts["Question 1 · Correct"].exists)
+    capture("18-quiz-review")
+    reveal(app.buttons["quiz-done"]).tap()
+    XCTAssertTrue(app.staticTexts["Hello, Jamie."].waitForExistence(timeout: 10))
+
+    // Scanned from the class page: the same quiz now shows the last score first.
+    app.buttons["My Learning"].firstMatch.tap()
+    app.staticTexts["Responsible Generative AI Basics"].firstMatch.tap()
+    reveal(app.buttons["scan-checkin"]).tap()
+    let field = app.textFields["scan-link"]
+    XCTAssertTrue(field.waitForExistence(timeout: 10))
+    field.tap()
+    field.typeText(link.absoluteString)
+    XCTAssertEqual(app.buttons["scan-link-go"].label, "Open quiz")
+    app.buttons["scan-link-go"].tap()
+    XCTAssertTrue(app.staticTexts["2 / 3"].waitForExistence(timeout: 15))
+    XCTAssertTrue(app.buttons["quiz-retake"].exists)
+    capture("19-quiz-last-score")
+    app.buttons["quiz-retake"].tap()
+    XCTAssertTrue(app.staticTexts["Question 1 of 3"].waitForExistence(timeout: 5))
+    app.buttons["quiz-option-1"].tap()
+    app.buttons["quiz-next"].tap()
+    app.buttons["quiz-option-0"].tap()
+    app.buttons["quiz-next"].tap()
+    app.buttons["quiz-option-2"].tap()
+    app.buttons["quiz-submit"].tap()
+    XCTAssertTrue(app.staticTexts["3 / 3"].waitForExistence(timeout: 10))
+    reveal(app.buttons["quiz-done"]).tap()
+    XCTAssertFalse(app.buttons["quiz-done"].waitForExistence(timeout: 2))
+
+    // Already signed in when the link arrives: the quiz opens at once.
+    app.launchEnvironment["DEMO_ROLE"] = "learner"
+    app.open(link)
+    XCTAssertTrue(app.staticTexts["Question 1 of 3"].waitForExistence(timeout: 15))
+    XCTAssertTrue(app.staticTexts["SAMPLE QUIZ"].exists)
+    app.buttons["quiz-close"].tap()
+    XCTAssertTrue(app.staticTexts["Hello, Jamie."].waitForExistence(timeout: 10))
   }
 }

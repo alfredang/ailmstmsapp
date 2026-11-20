@@ -7,8 +7,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     DEVELOPMENT_TEAM: GU9WTSTX9M
-    MARKETING_VERSION: '1.0'
-    CURRENT_PROJECT_VERSION: '7'
+    MARKETING_VERSION: '1.1'
+    CURRENT_PROJECT_VERSION: '8'
     CODE_SIGN_STYLE: Automatic
 targets:
   TertiaryLearning:
@@ -39,7 +39,7 @@ targets:
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSCalendarsWriteOnlyAccessUsageDescription: Add a class you choose to your calendar.
         NSCalendarsUsageDescription: Add a class you choose to your calendar.
-        NSCameraUsageDescription: Scan the class QR code your trainer shows to check in to your session.
+        NSCameraUsageDescription: Scan the QR code your trainer shows to check in to your session or open a class quiz.
   TertiaryLearningTests:
     type: bundle.unit-test
     platform: iOS

@@ -1,0 +1,27 @@
+{
+ "success": true,
+ "attemptId": 812,
+ "completedAt": "2026-11-20T06:20:00.000Z",
+ "score": 2,
+ "total": 3,
+ "breakdown": [
+  {
+   "questionId": "q-1",
+   "correct": true,
+   "correctIndex": 0,
+   "selectedIndex": 0
+  },
+  {
+   "questionId": 2,
+   "correct": false,
+   "correctIndex": 1,
+   "selectedIndex": 2
+  },
+  {
+   "questionId": "q-3",
+   "correct": true,
+   "correctIndex": 1,
+   "selectedIndex": 1
+  }
+ ]
+}

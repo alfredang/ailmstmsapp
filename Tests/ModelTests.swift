@@ -101,4 +101,200 @@ final class ModelTests: XCTestCase {
     let dashboard = try fixture("dashboard", as: Dashboard.self)
     XCTAssertEqual(dashboard.courses.count, 1)
   }
+
+  // MARK: Quiz QR code links
+
+  func testQuizLinkParsing() throws {
+    let course = "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+    let link = try XCTUnwrap(
+      QuizLink.parse(URL(string: "https://lms-tms.tertiaryinfotech.com/quiz/\(course)/quiz-17")!))
+    XCTAssertEqual(link.courseID, course)
+    XCTAssertEqual(link.quizID, "quiz-17")
+    // Trailing slash, query, upper-case host and surrounding whitespace from a QR reader.
+    XCTAssertEqual(
+      QuizLink.parse(" https://LMS-TMS.tertiaryinfotech.com/quiz/\(course)/quiz-17/?src=qr\n"), link)
+    XCTAssertEqual(
+      QuizLink.parse("https://lms-tms.tertiaryinfotech.com/quiz/\(course)/a%20b")?.quizID, "a b")
+    // Anything else is not a quiz link.
+    for bad in [
+      "http://lms-tms.tertiaryinfotech.com/quiz/\(course)/quiz-17",
+      "https://example.com/quiz/\(course)/quiz-17",
+      "https://lms-tms.tertiaryinfotech.com.evil.example/quiz/\(course)/quiz-17",
+      "https://lms-tms.tertiaryinfotech.com/quiz/\(course)",
+      "https://lms-tms.tertiaryinfotech.com/quiz/\(course)/quiz-17/extra",
+      "https://lms-tms.tertiaryinfotech.com/checkin/\(String(repeating: "a", count: 32))",
+      "https://lms-tms.tertiaryinfotech.com/",
+      "tiatms://quiz/\(course)/quiz-17", "not a link", "",
+    ] {
+      XCTAssertNil(QuizLink.parse(bad), bad)
+    }
+    // A check-in code is still a check-in code, and a quiz link is not one.
+    XCTAssertNil(
+      DocumentLink.checkinCode("https://lms-tms.tertiaryinfotech.com/quiz/\(course)/quiz-17"))
+  }
+
+  func testQuizScoring() {
+    let quiz = Sample.quiz(link: QuizLink(courseID: "c", quizID: "q"))
+    XCTAssertEqual(quiz.questions.count, 3)
+    XCTAssertTrue(
+      quiz.questions.allSatisfy { q in q.correctIndex.map(q.options.indices.contains) == true })
+    let all = quiz.score(answers: ["q1": 1, "q2": 0, "q3": 2])
+    XCTAssertEqual([all.score, all.total, all.percent], [3, 3, 100])
+    XCTAssertTrue(all.breakdown.allSatisfy(\.correct))
+    // One wrong, one unanswered.
+    let some = quiz.score(answers: ["q1": 1, "q2": 3])
+    XCTAssertEqual([some.score, some.total, some.percent], [1, 3, 33])
+    XCTAssertEqual(some.breakdown.map(\.correct), [true, false, false])
+    XCTAssertEqual(some.breakdown.map(\.selectedIndex), [1, 3, nil])
+    XCTAssertEqual(quiz.score(answers: [:]).score, 0)
+    XCTAssertEqual(QuizResult.percent(score: 0, total: 0), 0)
+    XCTAssertEqual(QuizResult.percent(score: 2, total: 3), 67)
+  }
+
+  func testQuizResultReviewMapsServerMarking() throws {
+    let reply = try fixture("quiz", as: QuizReply.self)
+    XCTAssertEqual(reply.quiz.title, "Module 1 quiz")
+    XCTAssertEqual(reply.quiz.courseCode, "APPTEST")
+    XCTAssertEqual(reply.quiz.questions.map(\.id), ["q-1", "2", "q-3"])
+    XCTAssertEqual(reply.previous?.score, 1)
+    XCTAssertEqual(reply.previous?.percent, 33)
+    XCTAssertEqual(reply.previous?.completedLabel, "20 Nov 2026, 14:05")
+    XCTAssertNil(try fixture("quiz-first-attempt", as: QuizReply.self).previous)
+
+    let result = try fixture("quiz-result", as: QuizResult.self)
+    XCTAssertEqual([result.score, result.total, result.percent], [2, 3, 67])
+    XCTAssertEqual(result.attemptId, "812")
+    let review = result.review(for: reply.quiz, answers: ["q-1": 0, "2": 2, "q-3": 1])
+    XCTAssertEqual(review.map(\.number), [1, 2, 3])
+    XCTAssertEqual(review.map(\.correct), [true, false, true])
+    XCTAssertEqual(review.map(\.selectedIndex), [0, 2, 1])
+    // The server's answer key wins over the one sent with the questions.
+    XCTAssertEqual(review.map(\.correctIndex), [0, 1, 1])
+    XCTAssertEqual(review[1].options.count, 4)
+
+    // A question the server did not mark falls back to the learner's answer and the quiz key.
+    let partial = QuizResult(
+      attemptId: "1", completedAt: nil, score: 1, total: 3,
+      breakdown: [QuizResult.Item(questionId: "q-1", correct: true, correctIndex: 0, selectedIndex: 0)])
+    let fallback = partial.review(for: reply.quiz, answers: ["q-1": 0, "2": 1])
+    XCTAssertEqual(fallback.map(\.correct), [true, true, false])
+    XCTAssertEqual(fallback.map(\.selectedIndex), [0, 1, nil])
+  }
+
+  @MainActor func testQuizLinkWaitsForSignInAndSampleQuizScores() async throws {
+    let store = Store()
+    XCTAssertFalse(store.handle(url: URL(string: "https://lms-tms.tertiaryinfotech.com/mobile/privacy.html")!))
+    XCTAssertNil(store.pendingQuiz)
+    let url = URL(string: "https://lms-tms.tertiaryinfotech.com/quiz/3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b/quiz-17")!
+    XCTAssertTrue(store.handle(url: url))
+    // Signed out: the quiz is kept for after sign-in.
+    XCTAssertNil(store.user)
+    let link = try XCTUnwrap(store.pendingQuiz)
+    store.openDemo("learner")
+    XCTAssertEqual(store.pendingQuiz, link)
+    let first = try await store.quiz(link)
+    XCTAssertNil(first.previous)
+    let result = try await store.submit(quiz: first.quiz, link: link, answers: ["q1": 1, "q2": 1, "q3": 2])
+    XCTAssertEqual([result.score, result.total], [2, 3])
+    let again = try await store.quiz(link)
+    XCTAssertEqual(again.previous?.score, 2)
+    XCTAssertEqual(again.previous?.total, 3)
+    store.clear()
+  }
+
+  /// The live path, against a stubbed portal: the requests the app sends for a quiz link and
+  /// what it makes of the server's replies (shapes taken from the two /api/courses routes).
+  @MainActor func testQuizRequestsMatchThePortalContract() async throws {
+    URLProtocol.registerClass(PortalStub.self)
+    defer {
+      URLProtocol.unregisterClass(PortalStub.self)
+      PortalStub.seen = []
+      Keychain.clear()
+    }
+    try Keychain.save("lms_test_token")
+    let store = Store()
+    store.user = User(
+      id: "user-1", email: "learner@example.test", fullName: "Test Learner", role: "learner",
+      roles: ["learner"])
+    let course = "31000000-0000-0000-0000-000000000001"
+    let link = try XCTUnwrap(
+      QuizLink.parse("https://lms-tms.tertiaryinfotech.com/quiz/\(course)/quiz-17"))
+
+    let reply = try await store.quiz(link)
+    XCTAssertEqual(reply.quiz.questions.count, 3)
+    XCTAssertEqual(reply.previous?.score, 1)
+    let get = try XCTUnwrap(PortalStub.seen.last)
+    XCTAssertEqual(get.method, "GET")
+    XCTAssertEqual(
+      get.url, "https://lms-tms.tertiaryinfotech.com/api/courses/quiz?courseId=\(course)&quizId=quiz-17")
+    XCTAssertEqual(get.authorization, "Bearer lms_test_token")
+
+    let answers = ["q-1": 0, "2": 2, "q-3": 1]
+    let result = try await store.submit(quiz: reply.quiz, link: link, answers: answers)
+    XCTAssertEqual([result.score, result.total], [2, 3])
+    XCTAssertEqual(result.review(for: reply.quiz, answers: answers).map(\.correct), [true, false, true])
+    let post = try XCTUnwrap(PortalStub.seen.last)
+    XCTAssertEqual(post.method, "POST")
+    XCTAssertEqual(post.url, "https://lms-tms.tertiaryinfotech.com/api/courses/submit-quiz")
+    XCTAssertEqual(post.authorization, "Bearer lms_test_token")
+    XCTAssertEqual(post.body["userId"] as? String, "user-1")
+    XCTAssertEqual(post.body["courseId"] as? String, course)
+    XCTAssertEqual(post.body["quizId"] as? String, "quiz-17")
+    XCTAssertEqual(post.body["answers"] as? [String: Int], answers)
+
+    // A quiz the trainer removed: the server's 404 message reaches the screen.
+    let gone = QuizLink(courseID: course, quizID: "removed")
+    do {
+      _ = try await store.quiz(gone)
+      XCTFail("Expected the removed quiz to fail")
+    } catch { XCTAssertEqual(error.localizedDescription, "Quiz not found") }
+  }
+}
+
+/// Answers the two quiz routes from the recorded fixtures and records what was asked.
+final class PortalStub: URLProtocol {
+  struct Seen {
+    let method: String
+    let url: String
+    let authorization: String?
+    let body: [String: Any]
+  }
+  static var seen: [Seen] = []
+  override class func canInit(with request: URLRequest) -> Bool {
+    request.url?.path.hasPrefix("/api/courses/") == true
+  }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override func startLoading() {
+    var data = request.httpBody ?? Data()
+    if let stream = request.httpBodyStream {
+      stream.open()
+      var buffer = [UInt8](repeating: 0, count: 4096)
+      while stream.hasBytesAvailable {
+        let read = stream.read(&buffer, maxLength: buffer.count)
+        if read <= 0 { break }
+        data.append(buffer, count: read)
+      }
+      stream.close()
+    }
+    let url = request.url!
+    Self.seen.append(
+      Seen(
+        method: request.httpMethod ?? "GET", url: url.absoluteString,
+        authorization: request.value(forHTTPHeaderField: "Authorization"),
+        body: ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any]) ?? [:]))
+    let removed = url.query?.contains("quizId=removed") == true
+    let name = url.path.hasSuffix("submit-quiz") ? "quiz-result" : "quiz"
+    let payload =
+      removed
+      ? Data(#"{"success":false,"error":"Quiz not found"}"#.utf8)
+      : try! Data(
+        contentsOf: Bundle(for: PortalStub.self).url(forResource: name, withExtension: "json")!)
+    let response = HTTPURLResponse(
+      url: url, statusCode: removed ? 404 : 200, httpVersion: "HTTP/1.1",
+      headerFields: ["Content-Type": "application/json"])!
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(self, didLoad: payload)
+    client?.urlProtocolDidFinishLoading(self)
+  }
+  override func stopLoading() {}
 }

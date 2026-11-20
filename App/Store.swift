@@ -16,6 +16,9 @@ import UserNotifications
   /// Sample-mode state, so check-ins, submissions and grades made in the demo are visible.
   var demoDetails: [String: ClassDetail] = [:]
   var demoSheets: [String: AttendanceSheet] = [:]
+  var demoQuizAttempts: [String: QuizAttempt] = [:]
+  /// The quiz a QR code link asked for. Kept while signed out, so it opens right after sign-in.
+  @Published var pendingQuiz: QuizLink?
   @Published var mustChangePassword = false
   /// "system", "light" or "dark". Follows the user's profile; cached so it applies at launch.
   @Published var theme = UserDefaults.standard.string(forKey: "theme") ?? "system" {
@@ -202,6 +205,7 @@ import UserNotifications
     profile = nil
     demoDetails = [:]
     demoSheets = [:]
+    demoQuizAttempts = [:]
     mustChangePassword = false
     theme = "system"
     UNUserNotificationCenter.current().removeAllDeliveredNotifications()
@@ -211,6 +215,7 @@ import UserNotifications
     demo = true
     demoDetails = [:]
     demoSheets = [:]
+    demoQuizAttempts = [:]
     self.role = role
     user = User(
       id: "demo", email: "sample@example.com",

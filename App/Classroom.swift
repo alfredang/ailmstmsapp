@@ -177,6 +177,7 @@ struct CourseDetail: View {
 
       if let detail {
         attendance(detail)
+        if !trainer { quizzes }
         assessments(detail)
         if trainer { roster(detail) }
         surveys(detail)
@@ -201,6 +202,11 @@ struct CourseDetail: View {
     .sheet(isPresented: $scanning) {
       QRScannerSheet { code in
         scanning = false
+        // A quiz QR code scanned here opens the quiz instead of failing as a check-in code.
+        if let quiz = QuizLink.parse(code) {
+          store.open(quiz: quiz)
+          return
+        }
         Task {
           do {
             notice = try await store.checkIn(code: code, courseID: course.id)
@@ -281,6 +287,29 @@ struct CourseDetail: View {
         trainer
           ? "Open a session to show its check-in QR code or mark attendance yourself. SSG e-attendance is taken on MySkillsFuture."
           : "Scan the QR code your trainer shows in class. SSG e-attendance is taken separately on MySkillsFuture with Singpass."
+      )
+    }
+  }
+
+  private var quizzes: some View {
+    Section {
+      Button {
+        scanning = true
+      } label: {
+        Label("Scan a quiz QR code", systemImage: "questionmark.circle")
+      }.accessibilityIdentifier("scan-quiz")
+      if store.demo {
+        Button {
+          store.open(quiz: QuizLink(courseID: course.id, quizID: "sample-quiz"))
+        } label: {
+          Label("Try the sample quiz", systemImage: "play.circle")
+        }.accessibilityIdentifier("sample-quiz")
+      }
+    } header: {
+      Text("Class quiz")
+    } footer: {
+      Text(
+        "When your trainer shows a quiz QR code, scan it here or with your phone camera. The quiz opens in the app and your score is saved to your class."
       )
     }
   }
@@ -691,7 +720,7 @@ struct QRScannerSheet: View {
           ContentUnavailableView(
             "Camera not available", systemImage: "camera.fill",
             description: Text(
-              "Allow camera access in Settings to scan, or enter the check-in link below."))
+              "Allow camera access in Settings to scan, or enter the link below."))
         } else {
           ProgressView()
         }
@@ -700,14 +729,17 @@ struct QRScannerSheet: View {
             .buttonStyle(.borderedProminent).accessibilityIdentifier("sample-checkin")
         }
         HStack {
-          TextField("Or paste the check-in link", text: $typed).textInputAutocapitalization(.never)
+          TextField("Or paste the link", text: $typed).textInputAutocapitalization(.never)
             .autocorrectionDisabled().textFieldStyle(.roundedBorder)
-          Button("Check in") { onCode(typed) }.disabled(DocumentLink.checkinCode(typed) == nil)
+            .accessibilityIdentifier("scan-link")
+          Button(QuizLink.parse(typed) != nil ? "Open quiz" : "Check in") { onCode(typed) }
+            .disabled(DocumentLink.checkinCode(typed) == nil && QuizLink.parse(typed) == nil)
+            .accessibilityIdentifier("scan-link-go")
         }
         Spacer(minLength: 0)
       }
       .padding(20)
-      .navigationTitle("Class check-in").navigationBarTitleDisplayMode(.inline)
+      .navigationTitle("Scan class QR code").navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
       .task {
         guard AVCaptureDevice.default(for: .video) != nil else {

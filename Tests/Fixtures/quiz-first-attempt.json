@@ -1,0 +1,24 @@
+{
+ "success": true,
+ "quiz": {
+  "id": "quiz-17",
+  "courseId": "31000000-0000-0000-0000-000000000001",
+  "title": "Module 1 quiz",
+  "courseTitle": "App test course",
+  "courseCode": null,
+  "questions": [
+   {
+    "id": "q-1",
+    "question": "Which is a prime number?",
+    "options": [
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "correctIndex": 0
+   }
+  ]
+ },
+ "previous": null
+}

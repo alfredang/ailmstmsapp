@@ -1,0 +1,48 @@
+{
+ "success": true,
+ "quiz": {
+  "id": "quiz-17",
+  "courseId": "31000000-0000-0000-0000-000000000001",
+  "title": "Module 1 quiz",
+  "courseTitle": "App test course",
+  "courseCode": "APPTEST",
+  "questions": [
+   {
+    "id": "q-1",
+    "question": "Which is a prime number?",
+    "options": [
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "correctIndex": 0
+   },
+   {
+    "id": 2,
+    "question": "2 + 2 = ?",
+    "options": [
+     "3",
+     "4",
+     "5",
+     "22"
+    ],
+    "correctIndex": 1
+   },
+   {
+    "id": "q-3",
+    "question": "The sky is usually…",
+    "options": [
+     "Green",
+     "Blue"
+    ],
+    "correctIndex": 1
+   }
+  ]
+ },
+ "previous": {
+  "score": 1,
+  "total": 3,
+  "completedAt": "2026-11-20T06:05:09.123Z"
+ }
+}

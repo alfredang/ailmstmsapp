@@ -135,6 +135,41 @@ enum Sample {
       ], submitted: submitted, autofill: ["course_title": "Responsible Generative AI Basics"])
   }
 
+  /// The quiz shown for any quiz link in sample mode. Nothing is sent to the academy.
+  static func quiz(link: QuizLink) -> Quiz {
+    Quiz(
+      id: link.quizID, courseId: link.courseID, title: "Responsible AI check-in quiz",
+      courseTitle: "Responsible Generative AI Basics", courseCode: "TGS-2025060472 · SAMPLE",
+      questions: [
+        QuizQuestion(
+          id: "q1",
+          question: "Which practice best supports the responsible use of generative AI at work?",
+          options: [
+            "Pasting confidential client data into any public chatbot",
+            "Checking AI output for accuracy before you rely on it",
+            "Presenting AI-written text as verified fact",
+            "Turning off human review to save time",
+          ], correctIndex: 1),
+        QuizQuestion(
+          id: "q2", question: "What is an AI \"hallucination\"?",
+          options: [
+            "A confident answer that is false or made up",
+            "A slow response from the model",
+            "An image created from a text prompt",
+            "A model that refuses to answer",
+          ], correctIndex: 0),
+        QuizQuestion(
+          id: "q3",
+          question: "Who stays accountable for a decision made with the help of an AI tool?",
+          options: [
+            "The AI vendor only",
+            "Nobody, because the tool decided",
+            "The people and organisation using the tool",
+            "The person who wrote the prompt template",
+          ], correctIndex: 2),
+      ])
+  }
+
   /// A small on-device PDF so the in-app reader can be explored without an account.
   static func pdf(title: String) -> PDFDocument? {
     let page = CGRect(x: 0, y: 0, width: 595, height: 842)
