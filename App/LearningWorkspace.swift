@@ -5,16 +5,10 @@ struct AcademyHeader: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      Text("TIA")
-        .font(.system(compact ? .caption : .headline, design: .rounded, weight: .black))
-        .foregroundStyle(.white)
+      Image("AcademyLogo")
+        .resizable()
+        .scaledToFit()
         .frame(width: compact ? 38 : 48, height: compact ? 38 : 48)
-        .background(
-          LinearGradient(
-            colors: [Theme.brandBlue, Theme.brandNavy],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing),
-          in: RoundedRectangle(cornerRadius: compact ? 10 : 14, style: .continuous))
       VStack(alignment: .leading, spacing: 2) {
         Text("TERTIARY INFOTECH ACADEMY")
           .font(.caption2.weight(.bold))

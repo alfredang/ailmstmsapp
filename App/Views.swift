@@ -108,6 +108,8 @@ struct LoginView: View {
   @State var password = ""
   @State private var google = GoogleAdminSignIn()
   @State private var googleBusy = false
+  @State private var showAdmin = false
+  @State private var adminError: String?
   @FocusState private var focus: Field?
   private enum Field { case email, password, code }
 
@@ -124,23 +126,9 @@ struct LoginView: View {
     NavigationStack {
       ScrollView {
         VStack(spacing: 22) {
-          // App mark and name
-          VStack(spacing: 10) {
-            Text("TIA")
-              .font(.system(size: 32, weight: .black, design: .rounded))
-              .foregroundStyle(.white)
-              .frame(width: 92, height: 92)
-              .background(
-                LinearGradient(
-                  colors: [Theme.brandBlue, Theme.brandNavy], startPoint: .top, endPoint: .bottom),
-                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-              )
-              .shadow(color: Theme.brandBlue.opacity(0.25), radius: 12, y: 6)
-              .accessibilityHidden(true)
-            Text(Theme.name).font(.system(size: 30, weight: .heavy))
-            Text("Tertiary Infotech Academy").font(.subheadline).foregroundStyle(.secondary)
-          }
-          .padding(.top, 12)
+          // Academy logo, name, then this app's name
+          AcademyBrandHeader(appName: Theme.name)
+            .padding(.top, 12)
 
           if store.pendingQuiz != nil {
             Label(
@@ -281,10 +269,13 @@ struct LoginView: View {
               Link(
                 "Privacy policy",
                 destination: URL(string: "https://lms-tms.tertiaryinfotech.com/mobile/privacy.html")!)
-              // Deliberately quiet: staff know it is here.
-              Button("Admin sign-in") { Task { await signInAsAdmin() } }
-                .disabled(busy)
-                .accessibilityIdentifier("admin-sign-in")
+              // Deliberately quiet: staff know it is here. Opens the admin page.
+              Button("Admin sign-in") {
+                adminError = nil
+                showAdmin = true
+              }
+              .disabled(busy)
+              .accessibilityIdentifier("admin-sign-in")
             }
             .font(.footnote)
             .tint(.secondary)
@@ -301,6 +292,11 @@ struct LoginView: View {
       )
       .scrollDismissesKeyboard(.interactively)
       .toolbar(.hidden, for: .navigationBar)
+      .sheet(isPresented: $showAdmin) {
+        AdminSignInPage(appName: Theme.name, busy: googleBusy, error: adminError) {
+          Task { await signInAsAdmin() }
+        }
+      }
     }
   }
 
@@ -338,14 +334,16 @@ struct LoginView: View {
   /// Admin sign-in: Google in the system sign-in sheet, for allow-listed admin accounts only.
   private func signInAsAdmin() async {
     googleBusy = true
+    adminError = nil
     defer { googleBusy = false }
     do {
       let result = try await google.start()
       try await store.loginWithGoogle(code: result.code, verifier: result.verifier)
+      showAdmin = false
     } catch GoogleAdminSignIn.Failure.cancelled {
-      // Closed the sheet: nothing to report.
+      // Closed the Google sheet: nothing to report.
     } catch {
-      store.error = error.localizedDescription
+      adminError = error.localizedDescription
     }
   }
 
