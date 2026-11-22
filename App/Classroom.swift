@@ -3,6 +3,7 @@ import CoreImage.CIFilterBuiltins
 import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
+import WebKit
 
 // Class detail and everything a learner or trainer does inside a class:
 // courseware (PDF reader), attendance, assessments, course feedback and TRAQOM.
@@ -156,6 +157,7 @@ struct CourseDetail: View {
   @State private var problem: String?
   @State private var notice: String?
   @State private var scanning = false
+  @State private var traqomQR = false
 
   private var trainer: Bool { store.role == "trainer" }
 
@@ -198,6 +200,15 @@ struct CourseDetail: View {
       Button("OK") { notice = nil }
     } message: {
       Text(notice ?? "")
+    }
+    .sheet(isPresented: $traqomQR) {
+      QRCodeSheet(
+        title: course.title,
+        text: URL(string: detail?.traqomURL ?? "", relativeTo: API.shared.base)?.absoluteString
+          ?? "",
+        heading: "TRAQOM Survey",
+        hint: "Learners scan this with their phone camera to open the TRAQOM survey.",
+        shareLabel: "Share Link")
     }
     .sheet(isPresented: $scanning) {
       QRScannerSheet { code in
@@ -384,11 +395,21 @@ struct CourseDetail: View {
       }
       if let traqom = detail.traqomURL {
         MaterialLink(title: "TRAQOM survey", icon: "list.clipboard", raw: traqom)
+        if trainer, !traqom.isEmpty {
+          Button {
+            traqomQR = true
+          } label: {
+            Label("Show TRAQOM Survey QR", systemImage: "qrcode")
+          }.accessibilityIdentifier("show-traqom-qr")
+        }
       }
     } header: {
       Text("Feedback & TRAQOM")
     } footer: {
-      Text("TRAQOM is the SkillsFuture Singapore training quality survey. It opens in the browser.")
+      Text(
+        trainer
+          ? "TRAQOM is the SkillsFuture Singapore training quality survey. Show the QR code for learners to scan, or open the link in the browser."
+          : "TRAQOM is the SkillsFuture Singapore training quality survey. It opens in the browser.")
     }
   }
 }
@@ -465,24 +486,46 @@ struct DocumentRow: View {
 }
 
 /// Opens a courseware link. A PDF (or a Google file that exports as one) is downloaded and shown
-/// in the app; anything else falls back to the in-app browser.
+/// in the app; anything else is shown as a web page. Download fetches the file itself and hands
+/// it to the system share sheet (Save to Files, Print, AirDrop).
 struct DocumentViewer: View {
   @EnvironmentObject var store: Store
   @Environment(\.dismiss) var dismiss
   let title: String
   let url: URL
   @State private var document: PDFDocument?
+  @State private var showWeb = false
   @State private var useBrowser = false
   @State private var loading = true
+  @State private var webLoading = true
+  @State private var webFailure: String?
+  @State private var downloading = false
+  @State private var downloaded: DownloadedFile?
+  @State private var downloadError: String?
 
   var body: some View {
     if useBrowser {
       Browser(url: url).ignoresSafeArea()
     } else {
       NavigationStack {
-        Group {
+        ZStack {
           if let document {
             PDFReader(document: document)
+          } else if showWeb {
+            WebPage(url: url, loading: $webLoading, failure: $webFailure)
+              .ignoresSafeArea(edges: .bottom)
+            if let webFailure {
+              ContentUnavailableView {
+                Label("Can't open this document", systemImage: "doc.questionmark")
+              } description: {
+                Text(webFailure)
+              } actions: {
+                Button("Open in browser") { useBrowser = true }.buttonStyle(.borderedProminent)
+              }
+              .background(Theme.page)
+            } else if webLoading {
+              ProgressView().controlSize(.large)
+            }
           } else {
             ProgressView("Opening \(title)…")
           }
@@ -490,7 +533,17 @@ struct DocumentViewer: View {
         .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
         .toolbar {
           ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
-          ToolbarItem(placement: .primaryAction) {
+          ToolbarItemGroup(placement: .primaryAction) {
+            if downloading {
+              ProgressView()
+            } else {
+              Button {
+                download()
+              } label: {
+                Label("Download", systemImage: "arrow.down.circle")
+              }
+              .accessibilityIdentifier("download-document")
+            }
             Button {
               useBrowser = true
             } label: {
@@ -498,8 +551,33 @@ struct DocumentViewer: View {
             }
           }
         }
+        .sheet(item: $downloaded) { FileShareSheet(file: $0.url) }
+        .alert(
+          "Download",
+          isPresented: Binding(get: { downloadError != nil }, set: { if !$0 { downloadError = nil } })
+        ) {
+          Button("Open in browser") { useBrowser = true }
+          Button("OK", role: .cancel) {}
+        } message: {
+          Text(downloadError ?? "")
+        }
       }
       .task { await open() }
+    }
+  }
+
+  private func download() {
+    downloading = true
+    Task {
+      do {
+        // A PDF already on screen is saved as it is; anything else is fetched from its link.
+        if let data = document?.dataRepresentation() {
+          downloaded = DownloadedFile(url: try DocumentDownload.save(data, name: title + ".pdf"))
+        } else {
+          downloaded = DownloadedFile(url: try await DocumentDownload.fetch(url, title: title))
+        }
+      } catch { downloadError = error.localizedDescription }
+      downloading = false
     }
   }
 
@@ -511,7 +589,7 @@ struct DocumentViewer: View {
       return
     }
     guard let source = DocumentLink.pdfURL(for: url.absoluteString) else {
-      useBrowser = true
+      showWeb = true
       return
     }
     do {
@@ -524,12 +602,173 @@ struct DocumentViewer: View {
         let data = try? Data(contentsOf: file, options: .mappedIfSafe),
         data.prefix(4) == Data("%PDF".utf8), let pdf = PDFDocument(data: Data(data))
       else {
-        useBrowser = true
+        showWeb = true
         return
       }
       document = pdf
     } catch {
-      useBrowser = true
+      showWeb = true
+    }
+  }
+}
+
+/// Fetches a document to a temporary file so it can be saved to Files, printed or shared.
+enum DocumentDownload {
+  /// Where the file itself can be fetched: Google Drive and Docs viewer links are turned into
+  /// their download / PDF-export form; any other link is used as it is. Nil for things that
+  /// are not one file (a Drive folder).
+  static func source(for url: URL) -> URL? {
+    let host = (url.host ?? "").lowercased()
+    let parts = url.pathComponents
+    func id(after key: String) -> String? {
+      guard let i = parts.firstIndex(of: key), i + 1 < parts.count else { return nil }
+      return parts[i + 1]
+    }
+    if host == "drive.google.com" {
+      if parts.contains("folders") { return nil }
+      let fileID =
+        id(after: "d")
+        ?? URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first {
+          $0.name == "id"
+        }?.value
+      guard let fileID else { return nil }
+      return URL(
+        string:
+          "https://drive.usercontent.google.com/download?id=\(fileID)&export=download&confirm=t")
+    }
+    if host == "docs.google.com", let docID = id(after: "d"), parts.count > 1 {
+      // /document/d/ID, /presentation/d/ID, /spreadsheets/d/ID
+      return URL(string: "https://docs.google.com/\(parts[1])/d/\(docID)/export?format=pdf")
+    }
+    return url
+  }
+
+  static func fetch(_ url: URL, title: String) async throws -> URL {
+    guard let source = source(for: url) else {
+      throw APIError(
+        message: "This is a folder, not a single file. Open it in the browser to download its files."
+      )
+    }
+    var request = URLRequest(url: source)
+    request.timeoutInterval = 120
+    let (temp, response): (URL, URLResponse)
+    do { (temp, response) = try await URLSession.shared.download(for: request) } catch {
+      throw APIError(
+        message: "The download did not finish. Check your connection and try again.")
+    }
+    let http = response as? HTTPURLResponse
+    let type = (http?.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
+    // A web page instead of a file means the owner has not allowed downloads, or it needs a sign-in.
+    guard (200..<300).contains(http?.statusCode ?? 0), !type.hasPrefix("text/html") else {
+      try? FileManager.default.removeItem(at: temp)
+      throw APIError(
+        message: "This document can't be downloaded here. Open it in the browser instead.")
+    }
+    var name = response.suggestedFilename ?? ""
+    if name.isEmpty || name == "download" || name == "export" || name == "Unknown" {
+      let ext =
+        type.contains("pdf") ? "pdf" : (source.pathExtension.isEmpty ? "pdf" : source.pathExtension)
+      name = title + "." + ext
+    }
+    let destination = try folder().appendingPathComponent(clean(name))
+    try FileManager.default.moveItem(at: temp, to: destination)
+    return destination
+  }
+
+  static func save(_ data: Data, name: String) throws -> URL {
+    let destination = try folder().appendingPathComponent(clean(name))
+    try data.write(to: destination)
+    return destination
+  }
+
+  private static func clean(_ name: String) -> String {
+    name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+  }
+  private static func folder() throws -> URL {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+      UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    return folder
+  }
+}
+
+struct DownloadedFile: Identifiable {
+  let url: URL
+  var id: URL { url }
+}
+
+/// The system share sheet for a downloaded file: Save to Files, Print, AirDrop, other apps.
+struct FileShareSheet: UIViewControllerRepresentable {
+  let file: URL
+  func makeUIViewController(context: Context) -> UIActivityViewController {
+    UIActivityViewController(activityItems: [file], applicationActivities: nil)
+  }
+  func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+/// Courseware that is not a PDF (web pages, Google Drive viewer pages), shown in the reader.
+struct WebPage: UIViewRepresentable {
+  let url: URL
+  @Binding var loading: Bool
+  @Binding var failure: String?
+
+  func makeCoordinator() -> Coordinator { Coordinator(self) }
+  func makeUIView(context: Context) -> WKWebView {
+    let view = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+    view.navigationDelegate = context.coordinator
+    view.uiDelegate = context.coordinator
+    view.allowsBackForwardNavigationGestures = true
+    view.load(URLRequest(url: url))
+    return view
+  }
+  func updateUIView(_ view: WKWebView, context: Context) {}
+
+  final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    let parent: WebPage
+    init(_ parent: WebPage) { self.parent = parent }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+      parent.loading = false
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+      fail(error)
+    }
+    func webView(
+      _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
+      withError error: Error
+    ) { fail(error) }
+
+    /// Links that leave the web (mailto:, tel:, app links) go to the system.
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async
+      -> WKNavigationActionPolicy
+    {
+      if let url = action.request.url, let scheme = url.scheme?.lowercased(),
+        !["http", "https", "about", "blob", "data"].contains(scheme)
+      {
+        await UIApplication.shared.open(url)
+        return .cancel
+      }
+      return .allow
+    }
+
+    /// A link that asks for a new window (common on Google Drive) opens in this one.
+    func webView(
+      _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+      for action: WKNavigationAction, windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+      if action.targetFrame == nil, let url = action.request.url {
+        webView.load(URLRequest(url: url))
+      }
+      return nil
+    }
+
+    private func fail(_ error: Error) {
+      let ns = error as NSError
+      // -999 = a navigation replaced by another; 102 = a download took over the frame.
+      if ns.code == NSURLErrorCancelled { return }
+      parent.loading = false
+      if ns.domain == "WebKitErrorDomain" && ns.code == 102 { return }
+      parent.failure = error.localizedDescription
     }
   }
 }
@@ -663,10 +902,14 @@ struct AttendanceToggleRow: View {
   }
 }
 
+/// A link as a QR code for the class to scan: the session check-in or a survey.
 struct QRCodeSheet: View {
   @Environment(\.dismiss) var dismiss
   let title: String
   let text: String
+  var heading = "Scan to check in"
+  var hint = "Keep this screen open while learners scan it."
+  var shareLabel = "Share Check-in Link"
 
   private var image: UIImage? {
     let filter = CIFilter.qrCodeGenerator()
@@ -680,22 +923,32 @@ struct QRCodeSheet: View {
 
   var body: some View {
     NavigationStack {
-      VStack(spacing: 20) {
-        Text("Scan to check in").font(.title2.bold())
-        if let image {
-          Image(uiImage: image).interpolation(.none).resizable().scaledToFit()
-            .padding(16).background(.white, in: RoundedRectangle(cornerRadius: 20))
-            .frame(maxWidth: 420)
-            .accessibilityLabel("Check-in QR code for \(title)")
+      ScrollView {
+        VStack(spacing: 18) {
+          Text(heading).font(.title2.bold()).multilineTextAlignment(.center)
+          if let image {
+            Image(uiImage: image).interpolation(.none).resizable().scaledToFit()
+              .padding(14)
+              // A QR code must stay dark-on-white to scan, in either theme.
+              .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+              .frame(maxWidth: 340)
+              .accessibilityLabel("\(heading): QR code for \(title)")
+          }
+          if !title.isEmpty { Text(title).font(.headline).multilineTextAlignment(.center) }
+          Text(hint).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+          if let url = URL(string: text), !text.isEmpty {
+            ShareLink(item: url) {
+              Label(shareLabel, systemImage: "square.and.arrow.up")
+            }
+            .buttonStyle(.bordered).accessibilityIdentifier("share-qr-link")
+          }
+          Button("Close QR code") { dismiss() }.buttonStyle(.bordered)
+            .accessibilityIdentifier("close-qr")
         }
-        Text(title).font(.headline)
-        Text("Keep this screen open while learners scan it.").font(.footnote).foregroundStyle(
-          .secondary)
-        Button("Close QR code") { dismiss() }.buttonStyle(.bordered)
-          .accessibilityIdentifier("close-qr")
+        .padding(24).frame(maxWidth: .infinity)
       }
-      .padding(24)
-      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+      .background(Theme.page)
+      .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
     }
   }
 }
@@ -1135,87 +1388,7 @@ struct CourseFeedbackView: View {
   }
 }
 
-// MARK: - Profile
-
-struct ProfileEditor: View {
-  @EnvironmentObject var store: Store
-  @Environment(\.dismiss) var dismiss
-  @State private var name = ""
-  @State private var phone = ""
-  @State private var company = ""
-  @State private var employment = ""
-  @State private var linkedin = ""
-  @State private var saving = false
-  @State private var problem: String?
-
-  var body: some View {
-    Form {
-      Section("Your details") {
-        TextField("Full name", text: $name).textContentType(.name)
-          .accessibilityIdentifier("profile-name")
-        LabeledContent("Email", value: store.profile?.email ?? store.user?.email ?? "")
-        TextField("Phone number", text: $phone).keyboardType(.phonePad).textContentType(
-          .telephoneNumber)
-      }
-      if store.roles.contains("learner") {
-        Section("Work") {
-          TextField("Company", text: $company)
-          Picker("Employment status", selection: $employment) {
-            Text("Not set").tag("")
-            ForEach(["Employed", "Unemployed", "Looking for Job"], id: \.self) { Text($0).tag($0) }
-          }
-        }
-      }
-      if store.roles.contains("trainer") {
-        Section("Trainer profile") {
-          TextField("LinkedIn link (https://…)", text: $linkedin).keyboardType(.URL)
-            .textInputAutocapitalization(.never).autocorrectionDisabled()
-        }
-      }
-      Section {
-        Button {
-          Task { await save() }
-        } label: {
-          Text(saving ? "Saving…" : "Save profile").frame(maxWidth: .infinity)
-        }.buttonStyle(.borderedProminent).disabled(saving || name.count < 2)
-          .accessibilityIdentifier("save-profile")
-      } footer: {
-        Text("To change your email address or NRIC, contact your academy.")
-      }
-    }
-    .navigationTitle("Edit profile").navigationBarTitleDisplayMode(.inline)
-    .onAppear {
-      name = store.profile?.fullName ?? store.user?.fullName ?? ""
-      phone = store.profile?.phone ?? ""
-      company = store.profile?.company ?? ""
-      employment = store.profile?.employmentStatus ?? ""
-      linkedin = store.profile?.linkedinURL ?? ""
-    }
-    .alert(
-      "Profile", isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } })
-    ) {
-      Button("OK") { problem = nil }
-    } message: {
-      Text(problem ?? "")
-    }
-  }
-
-  private func save() async {
-    saving = true
-    defer { saving = false }
-    var fields: [String: Any] = ["fullName": name, "phone": phone]
-    if store.roles.contains("learner") {
-      fields["company"] = company
-      fields["employmentStatus"] = employment
-    }
-    if store.roles.contains("trainer") { fields["linkedinURL"] = linkedin }
-    if let message = await store.saveProfile(fields) {
-      problem = message
-    } else {
-      dismiss()
-    }
-  }
-}
+// MARK: - Password
 
 struct ChangePasswordView: View {
   @EnvironmentObject var store: Store

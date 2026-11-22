@@ -46,6 +46,16 @@ struct RootView: View {
         .tint(Theme.accent).preferredColorScheme(store.colorScheme).pageSizedSheet()
     }
     .alert(
+      "Signed in",
+      isPresented: Binding(
+        get: { store.user != nil && store.error == nil && store.roleNotice != nil },
+        set: { if !$0 { store.roleNotice = nil } })
+    ) {
+      Button("OK", role: .cancel) { store.roleNotice = nil }
+    } message: {
+      Text(store.roleNotice ?? "")
+    }
+    .alert(
       "TIA TMS",
       isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })
     ) {
@@ -63,7 +73,7 @@ struct RootView: View {
     .onReceive(NotificationCenter.default.publisher(for: .openClass)) { note in
       Task {
         await store.refresh()
-        store.selectedTab = 2
+        store.selectedTab = Store.calendarTab
         if let id = note.object as? String,
           let session = store.dashboard.sessions.first(where: { $0.id == id }),
           let date = session.start
@@ -114,6 +124,18 @@ struct LoginView: View {
           }
           VStack(alignment: .leading, spacing: 16) {
             Text("Sign in").font(.title2.bold())
+            VStack(alignment: .leading, spacing: 6) {
+              Text("Sign in as").font(.subheadline.weight(.semibold))
+              Picker("Sign in as", selection: $store.loginChoice) {
+                Text("Learner").tag("learner")
+                Text("Trainer").tag("trainer")
+              }.pickerStyle(.segmented).accessibilityIdentifier("login-role")
+              Text(
+                store.loginChoice == "trainer"
+                  ? "See the classes you teach, attendance, payout and training hours."
+                  : "See the courses you are taking. Trainers attending a course sign in as a learner."
+              ).font(.footnote).foregroundStyle(.secondary)
+            }
             Picker("Sign-in method", selection: $usePassword) {
               Text("Email code").tag(false)
               Text("Password").tag(true)
@@ -205,105 +227,6 @@ struct LoginView: View {
     } catch { store.error = error.localizedDescription }
   }
 }
-struct MainView: View {
-  @EnvironmentObject var store: Store
-  var body: some View {
-    VStack(spacing: 0) {
-      if store.demo {
-        Text("SAMPLE DATA · \(store.role.uppercased()) DEMO").font(.caption.weight(.semibold))
-          .frame(maxWidth: .infinity).padding(6).background(.yellow.opacity(0.2))
-      }
-      TabView(selection: $store.selectedTab) {
-        NavigationStack { HomeView() }.tabItem { Label("Today", systemImage: "sun.max.fill") }.tag(
-          0)
-        NavigationStack { CoursesView() }.tabItem {
-          Label(
-            store.role == "trainer" ? "Teaching Kit" : "My Learning",
-            systemImage: "person.text.rectangle.fill")
-        }.tag(1)
-        NavigationStack { CalendarView() }.tabItem { Label("Calendar", systemImage: "calendar") }
-          .tag(
-            2)
-        NavigationStack { AccountView() }.tabItem {
-          Label("Account", systemImage: "person.crop.circle")
-        }.tag(3)
-      }
-    }
-  }
-}
-struct HomeView: View {
-  @EnvironmentObject var store: Store
-  var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 24) {
-        AcademyHeader(compact: true)
-        VStack(alignment: .leading, spacing: 10) {
-          Text(store.role == "trainer" ? "READY TO INSPIRE" : "KEEP LEARNING").font(.caption.bold())
-            .tracking(2)
-          Text("Hello, \(store.user?.fullName.components(separatedBy:" ").first ?? "there").").font(
-            .largeTitle.bold())
-          Text(
-            store.role == "trainer"
-              ? "Your teaching day, organised." : "Your next step starts here."
-          ).font(.headline)
-        }.foregroundStyle(.white).frame(maxWidth: .infinity, alignment: .leading).padding(26)
-          .background(
-            LinearGradient(
-              colors: [Theme.hero, Theme.brandNavy],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 28))
-        RoleWorkspaceCard()
-        HStack {
-          Stat(value: "\(store.dashboard.courses.count)", label: "Courses", icon: "books.vertical")
-          Stat(value: "\(store.upcoming.count)", label: "Upcoming classes", icon: "calendar")
-        }
-        HStack {
-          Text("Up next").font(.title2.bold())
-          Spacer()
-          Button("See calendar") { store.selectedTab = 2 }
-        }
-        if store.upcoming.isEmpty {
-          ContentUnavailableView(
-            "No upcoming classes", systemImage: "calendar.badge.checkmark",
-            description: Text("Your scheduled classes will appear here."))
-        }
-        ForEach(store.upcoming.prefix(3)) { s in
-          NavigationLink {
-            SessionDetail(session: s)
-          } label: {
-            SessionCard(session: s)
-          }.buttonStyle(.plain)
-        }
-        if !store.notifications {
-          Button {
-            Task { await store.enableNotifications() }
-          } label: {
-            Label("Enable 3-day and 1-day reminders", systemImage: "bell.badge").frame(
-              maxWidth: .infinity
-            ).padding(12)
-          }.buttonStyle(.bordered)
-        }
-        Text("Class times are shown in Singapore time (SGT).").font(.footnote).foregroundStyle(
-          .secondary)
-      }.padding(20).frame(maxWidth: 760)
-    }.background(Color(.systemGroupedBackground)).navigationTitle("Today").refreshable {
-      await store.refresh()
-    }
-  }
-}
-struct Stat: View {
-  let value: String
-  let label: String
-  let icon: String
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Image(systemName: icon).foregroundStyle(Theme.accent)
-      Text(value).font(.largeTitle.bold())
-      Text(label).font(.subheadline).foregroundStyle(.secondary)
-    }.frame(maxWidth: .infinity, alignment: .leading).padding(18).background(
-      .background, in: RoundedRectangle(cornerRadius: 20))
-  }
-}
 struct SessionCard: View {
   let session: ClassSession
   var body: some View {
@@ -331,61 +254,9 @@ struct SessionCard: View {
       }
       Spacer(minLength: 0)
       Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-    }.padding(16).background(.background, in: RoundedRectangle(cornerRadius: 20))
-  }
-}
-struct CoursesView: View {
-  @EnvironmentObject var store: Store
-  @State var query = ""
-  var filtered: [Course] {
-    store.dashboard.courses.filter {
-      query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)
-        || ($0.code ?? "").localizedCaseInsensitiveContains(query)
-    }
-  }
-  var body: some View {
-    List {
-      Section {
-        VStack(alignment: .leading, spacing: 10) {
-          AcademyHeader(compact: true)
-          Text(
-            store.role == "trainer"
-              ? "Your assigned teaching kits" : "Your assigned learning journey"
-          )
-          .font(.title2.bold())
-          Text(
-            store.role == "trainer"
-              ? "Trainer-only slides, learner materials and class sessions come directly from your academy."
-              : "Open your academy-published resources and keep track of what you have explored on this device."
-          )
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 8)
-      }
-      if filtered.isEmpty {
-        ContentUnavailableView(
-          "No courses found", systemImage: "books.vertical",
-          description: Text("Courses assigned to your account will appear here."))
-      }
-      ForEach(filtered) { c in
-        NavigationLink {
-          CourseDetail(course: c)
-        } label: {
-          VStack(alignment: .leading, spacing: 10) {
-            Label(c.code ?? "Course", systemImage: "book.closed.fill").font(.caption)
-              .foregroundStyle(Theme.accent)
-            Text(c.title).font(.headline)
-            Text("\(c.startDate ?? "Dates to be confirmed") · \(c.format ?? "Class")").font(
-              .caption
-            ).foregroundStyle(.secondary)
-            JourneyProgress(course: c)
-          }.padding(.vertical, 12)
-        }
-      }
-    }.navigationTitle(store.role == "trainer" ? "Teaching Kit" : "My Learning").searchable(
-      text: $query, prompt: "Find your course"
-    ).refreshable { await store.refresh() }
+    }.padding(16).background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.cardBorder, lineWidth: 1))
   }
 }
 struct MaterialLink: View {
@@ -535,97 +406,6 @@ struct EventEditor: UIViewControllerRepresentable {
     func eventEditViewController(
       _ controller: EKEventEditViewController, didCompleteWith action: EKEventEditViewAction
     ) { parent.dismiss() }
-  }
-}
-struct AccountView: View {
-  @EnvironmentObject var store: Store
-  @State var confirmDelete = false
-  var body: some View {
-    List {
-      Section("Your account") {
-        Text(store.profile?.fullName ?? store.user?.fullName ?? "").font(.headline)
-        Text(store.user?.email ?? "").foregroundStyle(.secondary)
-        NavigationLink("Edit profile") { ProfileEditor() }.accessibilityIdentifier("edit-profile")
-        if !store.demo { NavigationLink("Change password") { ChangePasswordView() } }
-        if store.roles.count > 1 {
-          Picker("View as", selection: $store.role) {
-            ForEach(store.roles, id: \.self) { Text($0.capitalized).tag($0) }
-          }.onChange(of: store.role) { _, _ in
-            store.dashboard = Dashboard(courses: [], sessions: [])
-            Task { await store.refresh() }
-          }
-        } else {
-          LabeledContent("Role", value: store.role.capitalized)
-        }
-      }
-      Section {
-        Picker(
-          "Appearance",
-          selection: Binding(
-            get: { store.theme },
-            set: { choice in
-              store.theme = choice
-              Task {
-                if let message = await store.saveProfile(["theme": choice]) {
-                  store.error = message
-                }
-              }
-            })
-        ) {
-          Text("Match device").tag("system")
-          Text("Light").tag("light")
-          Text("Dark").tag("dark")
-        }.accessibilityIdentifier("appearance")
-      } header: {
-        Text("Theme")
-      } footer: {
-        Text("Saved to your profile, so it follows you to your other devices.")
-      }
-      Section("Class reminders") {
-        Label("3 days before class", systemImage: "bell")
-        Label("1 day before class", systemImage: "bell.badge")
-        Label("On the morning of class", systemImage: "sunrise")
-        Button(store.notifications ? "Notification settings" : "Enable notifications") {
-          if store.notifications {
-            UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
-          } else {
-            Task { await store.enableNotifications() }
-          }
-        }
-        Text(
-          store.demo
-            ? "Sample mode does not register a device for real class reminders."
-            : "Notifications follow your current class assignments."
-        ).font(.footnote).foregroundStyle(.secondary)
-      }
-      Section {
-        NavigationLink("Feedback") { FeedbackView() }
-        NavigationLink("About") { AboutView() }
-        Link(
-          "Privacy policy",
-          destination: URL(string: "https://lms-tms.tertiaryinfotech.com/mobile/privacy.html")!)
-        Button(store.demo ? "Exit demo" : "Sign out", role: .destructive) {
-          Task { await store.signOut() }
-        }
-      }
-      Section {
-        Button("Delete account", role: .destructive) { confirmDelete = true }
-      } footer: {
-        Text(
-          "Initiate permanent account deletion. Training records that must be retained will be handled by your training provider."
-        )
-      }
-    }.navigationTitle("Account").confirmationDialog(
-      "Delete your account?", isPresented: $confirmDelete, titleVisibility: .visible
-    ) {
-      Button("Permanently delete account", role: .destructive) {
-        Task { await store.deleteAccount() }
-      }
-    } message: {
-      Text(
-        "You will be signed out and reminders stopped. Your shared learning-portal login and profile identity will be permanently removed. Required training and financial records are retained by the provider. Sample mode only clears sample data."
-      )
-    }
   }
 }
 struct FeedbackView: View {

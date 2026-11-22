@@ -25,7 +25,77 @@ import UserNotifications
     didSet { UserDefaults.standard.set(theme, forKey: "theme") }
   }
   var colorScheme: ColorScheme? { theme == "dark" ? .dark : theme == "light" ? .light : nil }
-  var roles: [String] { user?.roles.filter { ["learner", "trainer"].contains($0) } ?? [] }
+
+  // MARK: Roles
+  //
+  // The app shows one role per sign-in: the one picked on the sign-in screen. Only the
+  // owner account can switch, and only between roles the server says it holds. The choice
+  // changes what this device shows, never what the server allows.
+
+  /// Every role the app can show, in display order. A later phase appends "developer" here
+  /// (and its name below); the tabs, chip and switcher follow this list.
+  static let knownRoles = ["learner", "trainer"]
+  static func roleName(_ role: String) -> String {
+    switch role {
+    case "trainer": return "Trainer"
+    case "developer": return "Developer"
+    default: return "Learner"
+    }
+  }
+  static let ownerEmail = "angch@tertiaryinfotech.com"
+  static let accountTab = 4
+  static let calendarTab = 1
+
+  /// The Learner / Trainer choice on the sign-in screen. Stored once sign-in succeeds.
+  @Published var loginChoice = "learner"
+  /// Shown once after sign-in when the chosen role is not available on the account.
+  @Published var roleNotice: String?
+  /// The roles this account holds on the server, limited to the ones the app shows.
+  var roles: [String] { Self.knownRoles.filter { user?.roles.contains($0) ?? false } }
+  var isOwner: Bool { !demo && user?.email.lowercased() == Self.ownerEmail }
+  /// The roles offered in the "Viewing as" switcher: more than one for the owner only.
+  var availableRoles: [String] { isOwner ? roles : [role] }
+  var canSwitchRole: Bool { availableRoles.count > 1 }
+
+  /// The role to show for `user`. `chosen` is the sign-in screen's choice, or nil for a
+  /// session saved before the choice existed (which keeps the trainer view for a trainer).
+  private func resolveRole(for user: User, chosen: String?, announce: Bool) -> String? {
+    let held = Self.knownRoles.filter { user.roles.contains($0) }
+    guard let fallback = held.first else { return nil }
+    if user.email.lowercased() == Self.ownerEmail,
+      let viewing = UserDefaults.standard.string(forKey: "viewRole"), held.contains(viewing)
+    {
+      return viewing
+    }
+    guard let chosen else { return held.contains("trainer") ? "trainer" : fallback }
+    if held.contains(chosen) { return chosen }
+    if announce {
+      roleNotice =
+        chosen == "trainer"
+        ? "This account does not teach any classes, so you are signed in as a learner."
+        : "This account is a trainer account only, so you are signed in as a trainer."
+    }
+    return held.contains("learner") ? "learner" : fallback
+  }
+
+  /// Owner only: look at the app as another role this account holds.
+  func setViewRole(_ new: String) async {
+    guard canSwitchRole, availableRoles.contains(new), new != role else { return }
+    UserDefaults.standard.set(new, forKey: "viewRole")
+    role = new
+    dashboard = Dashboard(courses: [], sessions: [])
+    selectedTab = 0
+    await refresh()
+  }
+
+  /// Completed payouts for the signed-in trainer. This is the WSQ app, so every payout is shown.
+  func loadPayouts() async throws -> [Payout] {
+    if demo { return Sample.payouts() }
+    guard let id = user?.id else { return [] }
+    let reply: PayoutReply = try await API.shared.request("trainer/\(id)/payout-history")
+    return reply.data
+  }
+
   var upcoming: [ClassSession] {
     dashboard.sessions.filter { ($0.end ?? $0.start ?? .distantPast) >= Date() }.sorted {
       ($0.start ?? .distantFuture) < ($1.start ?? .distantFuture)
@@ -39,11 +109,12 @@ import UserNotifications
       let reply: LoginReply = try await API.shared.request(
         "mobile/auth", method: "POST", body: ["action": "verify", "email": email, "otp": otp])
       guard
-        let allowed = reply.data.user.roles.first(where: { ["learner", "trainer"].contains($0) })
+        let allowed = resolveRole(for: reply.data.user, chosen: loginChoice, announce: true)
       else {
         throw APIError(
           message: "This app is for learners and trainers. Your account has neither role.")
       }
+      UserDefaults.standard.set(loginChoice, forKey: "loginRole")
       try Keychain.save(reply.data.token)
       user = reply.data.user
       role = allowed
@@ -70,11 +141,12 @@ import UserNotifications
       let reply: PasswordReply = try await API.shared.request(
         "mobile/login", method: "POST", body: ["email": email, "password": password])
       guard
-        let allowed = reply.data.user.roles.first(where: { ["learner", "trainer"].contains($0) })
+        let allowed = resolveRole(for: reply.data.user, chosen: loginChoice, announce: true)
       else {
         throw APIError(
           message: "This app is for learners and trainers. Your account has neither role.")
       }
+      UserDefaults.standard.set(loginChoice, forKey: "loginRole")
       try Keychain.save(reply.data.token)
       mustChangePassword = reply.data.forcePasswordChange ?? false
       user = reply.data.user
@@ -121,6 +193,11 @@ import UserNotifications
         if let v = fields["linkedinURL"] as? String { copy.linkedinURL = v }
         if let v = fields["theme"] as? String { copy.theme = v }
         profile = copy
+        if let current = user, current.fullName != copy.fullName {
+          user = User(
+            id: current.id, email: current.email, fullName: copy.fullName, role: current.role,
+            roles: current.roles)
+        }
       }
       if let v = fields["theme"] as? String { theme = v }
       return nil
@@ -155,7 +232,9 @@ import UserNotifications
       }
       let reply: Verify = try await API.shared.request("mobile/me")
       guard
-        let allowed = reply.data.user.roles.first(where: { ["learner", "trainer"].contains($0) })
+        let allowed = resolveRole(
+          for: reply.data.user, chosen: UserDefaults.standard.string(forKey: "loginRole"),
+          announce: false)
       else {
         Keychain.clear()
         return
@@ -208,6 +287,10 @@ import UserNotifications
     demoQuizAttempts = [:]
     mustChangePassword = false
     theme = "system"
+    loginChoice = "learner"
+    roleNotice = nil
+    UserDefaults.standard.removeObject(forKey: "loginRole")
+    UserDefaults.standard.removeObject(forKey: "viewRole")
     UNUserNotificationCenter.current().removeAllDeliveredNotifications()
     UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
   }

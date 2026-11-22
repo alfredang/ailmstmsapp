@@ -28,9 +28,9 @@ final class NavigationTests: XCTestCase {
     XCTAssertTrue(demo.waitForExistence(timeout: 15))
     demo.tap()
     app.buttons["Learner demo"].tap()
-    XCTAssertTrue(app.staticTexts["Hello, Jamie."].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Jamie"].waitForExistence(timeout: 10))
     capture("01-learner-today")
-    app.buttons["My Learning"].firstMatch.tap()
+    app.buttons["My Classes"].firstMatch.tap()
     XCTAssertTrue(app.staticTexts["Responsible Generative AI Basics"].waitForExistence(timeout: 10))
     capture("02-courseware")
     app.staticTexts["Responsible Generative AI Basics"].firstMatch.tap()
@@ -42,14 +42,13 @@ final class NavigationTests: XCTestCase {
     if app.buttons["Jump to next class"].exists { app.buttons["Jump to next class"].tap() }
     capture("04-calendar")
     app.buttons["Account"].firstMatch.tap()
-    app.swipeUp()
-    app.buttons["Exit demo"].tap()
+    reveal(app.buttons["Exit demo"]).tap()
     XCTAssertTrue(demo.waitForExistence(timeout: 5))
     demo.tap()
     app.buttons["Trainer demo"].tap()
-    XCTAssertTrue(app.staticTexts["Hello, Alex."].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Alex"].waitForExistence(timeout: 5))
     capture("05-trainer-today")
-    app.buttons["Teaching Kit"].firstMatch.tap()
+    app.buttons["My Classes"].firstMatch.tap()
     app.staticTexts["Responsible Generative AI Basics"].firstMatch.tap()
     XCTAssertTrue(app.buttons["Trainer slides"].waitForExistence(timeout: 5))
     capture("06-trainer-materials")
@@ -61,13 +60,14 @@ final class NavigationTests: XCTestCase {
     XCTAssertTrue(demo.waitForExistence(timeout: 15))
     demo.tap()
     app.buttons["Learner demo"].tap()
-    app.buttons["My Learning"].firstMatch.tap()
+    app.buttons["My Classes"].firstMatch.tap()
     app.staticTexts["Responsible Generative AI Basics"].firstMatch.tap()
 
     // Courseware opens in the in-app PDF reader.
     XCTAssertTrue(app.buttons["Learner Guide"].waitForExistence(timeout: 10))
     app.buttons["Learner Guide"].tap()
     XCTAssertTrue(app.buttons["Open in browser"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.buttons["download-document"].exists)
     capture("07-pdf-reader")
     app.buttons["Done"].tap()
 
@@ -104,20 +104,19 @@ final class NavigationTests: XCTestCase {
 
     // Profile edit and theme.
     app.buttons["Account"].firstMatch.tap()
-    XCTAssertTrue(app.buttons["edit-profile"].waitForExistence(timeout: 5))
-    app.buttons["edit-profile"].tap()
     XCTAssertTrue(app.textFields["profile-name"].waitForExistence(timeout: 5))
     capture("11-profile")
     reveal(app.buttons["save-profile"]).tap()
-    XCTAssertTrue(app.buttons["edit-profile"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.buttons["appearance"].exists || app.staticTexts["Appearance"].exists)
+    XCTAssertTrue(app.staticTexts["Profile saved."].waitForExistence(timeout: 5))
+    app.buttons["OK"].tap()
+    XCTAssertTrue(app.segmentedControls["appearance"].exists || app.staticTexts["Appearance"].exists)
     reveal(app.buttons["Exit demo"]).tap()
 
     // Trainer: attendance sheet with QR and manual marking, then grading.
     XCTAssertTrue(demo.waitForExistence(timeout: 5))
     demo.tap()
     app.buttons["Trainer demo"].tap()
-    app.buttons["Teaching Kit"].firstMatch.tap()
+    app.buttons["My Classes"].firstMatch.tap()
     app.staticTexts["Responsible Generative AI Basics"].firstMatch.tap()
     XCTAssertTrue(app.buttons["Lesson Plan"].waitForExistence(timeout: 10))
     XCTAssertFalse(app.buttons["scan-checkin"].exists)
@@ -137,6 +136,17 @@ final class NavigationTests: XCTestCase {
     reveal(app.buttons["grading"]).tap()
     XCTAssertTrue(app.staticTexts["Jamie Lim (sample)"].waitForExistence(timeout: 5))
     capture("14-trainer-grading")
+    app.navigationBars.buttons.firstMatch.tap()
+    reveal(app.buttons["show-traqom-qr"]).tap()
+    XCTAssertTrue(app.staticTexts["TRAQOM Survey"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["share-qr-link"].exists)
+    capture("15-trainer-traqom-qr")
+    app.buttons["close-qr"].tap()
+    // Trainer tabs: payout from the sample data, hours still to come.
+    app.buttons["Payout"].firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["Total paid"].waitForExistence(timeout: 5))
+    app.buttons["Hours"].firstMatch.tap()
+    XCTAssertTrue(app.staticTexts["Coming soon"].waitForExistence(timeout: 5))
   }
 
   /// A quiz QR code link: arrives while signed out, waits for sign-in, then the quiz opens.
@@ -173,10 +183,10 @@ final class NavigationTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Question 1 · Correct"].exists)
     capture("18-quiz-review")
     reveal(app.buttons["quiz-done"]).tap()
-    XCTAssertTrue(app.staticTexts["Hello, Jamie."].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Jamie"].waitForExistence(timeout: 10))
 
     // Scanned from the class page: the same quiz now shows the last score first.
-    app.buttons["My Learning"].firstMatch.tap()
+    app.buttons["My Classes"].firstMatch.tap()
     app.staticTexts["Responsible Generative AI Basics"].firstMatch.tap()
     reveal(app.buttons["scan-checkin"]).tap()
     let field = app.textFields["scan-link"]
@@ -206,6 +216,6 @@ final class NavigationTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Question 1 of 3"].waitForExistence(timeout: 15))
     XCTAssertTrue(app.staticTexts["SAMPLE QUIZ"].exists)
     app.buttons["quiz-close"].tap()
-    XCTAssertTrue(app.staticTexts["Hello, Jamie."].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.staticTexts["Jamie"].waitForExistence(timeout: 10))
   }
 }

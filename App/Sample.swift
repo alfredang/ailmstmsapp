@@ -58,6 +58,24 @@ enum Sample {
       academy: "Tertiary Infotech Academy")
   }
 
+  /// Sample payouts for the trainer demo. Nothing here is a real payment.
+  static func payouts() -> [Payout] {
+    let date = DateFormatter()
+    date.dateFormat = "yyyy-MM-dd"
+    date.timeZone = TimeZone(identifier: "Asia/Singapore")
+    func day(_ back: Double) -> String { date.string(from: Date().addingTimeInterval(-back * 86400)) }
+    return [
+      Payout(
+        id: "sample-1", title: "Responsible Generative AI Basics (sample)",
+        courseCode: "TGS-2025060472", learners: 12, amount: 1200, paymentDate: day(9),
+        startDate: day(24), endDate: day(23)),
+      Payout(
+        id: "sample-2", title: "Fundamentals of AI Ethics and Responsible AI (sample)",
+        courseCode: "TGS-2023021102", learners: 8, amount: 850.5, paymentDate: day(40),
+        startDate: day(55), endDate: day(55)),
+    ]
+  }
+
   static func detail(id: String, role: String, dashboard: Dashboard) -> ClassDetail {
     let course = dashboard.courses.first { $0.id == id }
     let trainer = role == "trainer"

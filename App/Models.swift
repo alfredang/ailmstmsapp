@@ -117,6 +117,29 @@ enum Theme {
   static let brandBlue = Color(red: 0.04, green: 0.24, blue: 0.56)
   static let brandNavy = Color(red: 0.02, green: 0.11, blue: 0.28)
   static let name = "TIA TMS"
+
+  // Surfaces and status colours for the card layout. Every one adapts to light and dark.
+  private static func dynamic(light: UIColor, dark: UIColor) -> Color {
+    Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? dark : light })
+  }
+  /// Solid brand fill that carries white text (avatar, summary card, role switcher).
+  static let brand = dynamic(
+    light: UIColor(red: 0.04, green: 0.24, blue: 0.56, alpha: 1),
+    dark: UIColor(red: 0.12, green: 0.37, blue: 0.78, alpha: 1))
+  static let accentSoft = dynamic(
+    light: UIColor(red: 0.04, green: 0.24, blue: 0.56, alpha: 0.10),
+    dark: UIColor(red: 0.54, green: 0.71, blue: 0.97, alpha: 0.18))
+  static let success = dynamic(
+    light: UIColor(red: 0.11, green: 0.55, blue: 0.29, alpha: 1),
+    dark: UIColor(red: 0.30, green: 0.80, blue: 0.47, alpha: 1))
+  static let warning = dynamic(
+    light: UIColor(red: 0.80, green: 0.45, blue: 0.0, alpha: 1),
+    dark: UIColor(red: 1.0, green: 0.70, blue: 0.25, alpha: 1))
+  static let page = dynamic(
+    light: UIColor(red: 0.97, green: 0.97, blue: 0.98, alpha: 1), dark: .systemGroupedBackground)
+  static let card = dynamic(light: .white, dark: .secondarySystemGroupedBackground)
+  static let cardBorder = dynamic(
+    light: UIColor(red: 0.88, green: 0.88, blue: 0.90, alpha: 1), dark: UIColor(white: 1, alpha: 0.14))
 }
 
 // MARK: - Class detail, profile and feedback (GET /api/mobile/class, /profile, /feedback)
@@ -133,6 +156,97 @@ struct Profile: Codable, Equatable {
   var employmentStatus: String?
   var linkedinURL: String?
   var academy: String?
+  /// The profile picture, when the academy has one on file.
+  var pictureURL: String?
+}
+
+/// One completed trainer payout (GET /api/trainer/<id>/payout-history).
+struct Payout: Decodable, Identifiable {
+  let id: String
+  let title: String
+  let courseCode: String
+  let learners: Int?
+  let amount: Double
+  let paymentDate: String
+  let startDate: String
+  let endDate: String
+  let source: String
+
+  enum CodingKeys: String, CodingKey {
+    case id, source
+    case title = "course_title"
+    case courseCode = "course_code"
+    case learners = "num_learners"
+    case amount = "actual_payout"
+    case paymentDate = "payment_date"
+    case startDate = "start_date"
+    case endDate = "end_date"
+  }
+
+  init(
+    id: String, title: String, courseCode: String, learners: Int?, amount: Double,
+    paymentDate: String, startDate: String, endDate: String, source: String = "wsq"
+  ) {
+    self.id = id
+    self.title = title
+    self.courseCode = courseCode
+    self.learners = learners
+    self.amount = amount
+    self.paymentDate = paymentDate
+    self.startDate = startDate
+    self.endDate = endDate
+    self.source = source
+  }
+
+  // The portal sends numeric columns as text and ids as text or numbers, so both are accepted.
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    func text(_ key: CodingKeys) -> String {
+      if let v = try? c.decode(String.self, forKey: key) { return v }
+      if let v = try? c.decode(Int.self, forKey: key) { return String(v) }
+      if let v = try? c.decode(Double.self, forKey: key) { return String(v) }
+      return ""
+    }
+    source = text(.source)
+    // WSQ and non-WSQ rows come from different tables, so the source keeps their ids apart.
+    id = source + "-" + text(.id)
+    title = text(.title)
+    courseCode = text(.courseCode)
+    learners = Int(text(.learners))
+    amount = Double(text(.amount)) ?? 0
+    paymentDate = text(.paymentDate)
+    startDate = text(.startDate)
+    endDate = text(.endDate)
+  }
+}
+
+struct PayoutReply: Decodable { let data: [Payout] }
+
+/// Dates and money as the tabs show them.
+enum Fmt {
+  static func day(_ raw: String?) -> Date? {
+    // Midnight Singapore time on that day; accepts 2026-01-31 and 20260131.
+    guard let raw, !raw.isEmpty else { return nil }
+    return ClassSession.date(raw, "00:00")
+  }
+  static func longDate(_ raw: String?) -> String {
+    guard let date = day(raw) else { return raw ?? "" }
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_SG")
+    f.timeZone = TimeZone(identifier: "Asia/Singapore")
+    f.dateFormat = "d MMM yyyy"
+    return f.string(from: date)
+  }
+  static func range(_ start: String?, _ end: String?) -> String {
+    let a = longDate(start)
+    let b = longDate(end)
+    if a.isEmpty { return b.isEmpty ? "Dates to be confirmed" : b }
+    return b.isEmpty || a == b ? a : "\(a) – \(b)"
+  }
+  static func money(_ amount: Double) -> String {
+    amount.formatted(
+      .currency(code: "SGD").precision(.fractionLength(amount.rounded() == amount ? 0 : 2)))
+  }
 }
 
 struct ClassMaterial: Codable, Identifiable, Hashable {

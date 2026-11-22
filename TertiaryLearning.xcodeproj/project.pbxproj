@@ -21,6 +21,7 @@
 		B4B84562989433C5F5B678E7 /* NavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45994CB19E8D1729BF3A294E /* NavigationTests.swift */; };
 		C2E16FC0D137FFEB9DACA11B /* quiz-first-attempt.json in Resources */ = {isa = PBXBuildFile; fileRef = 248910DFCF4D9B1E132B22A7 /* quiz-first-attempt.json */; };
 		CDB5C825BCDF08D3BF48D1B8 /* class-trainer.json in Resources */ = {isa = PBXBuildFile; fileRef = 8A2618B61D14ED65618D777C /* class-trainer.json */; };
+		CF116657723E87065957F78D /* Shell.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA17AB40AA19DE109359777A /* Shell.swift */; };
 		E253026C6F8495987CF4F540 /* attendance.json in Resources */ = {isa = PBXBuildFile; fileRef = 8198AFA41FCE785D323CF56D /* attendance.json */; };
 		EA4FB78C65E71212EE22F6EA /* Views.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564D0236323E1BA03FD218E1 /* Views.swift */; };
 		EA61A948CC1EAC9341BD3A22 /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = A236E80D7C4204042E587CA2 /* API.swift */; };
@@ -73,6 +74,7 @@
 		C4ABBB9C8C9183B6FD6CF6AE /* quiz-result.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "quiz-result.json"; sourceTree = "<group>"; };
 		C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		D2BF6AC230D585BC3D3E0CAD /* Quiz.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Quiz.swift; sourceTree = "<group>"; };
+		EA17AB40AA19DE109359777A /* Shell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shell.swift; sourceTree = "<group>"; };
 		EDC25E3783839C5200DC519B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F982FEB7BE829D8AD7F551D5 /* LearningWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningWorkspace.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -99,6 +101,7 @@
 				C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */,
 				D2BF6AC230D585BC3D3E0CAD /* Quiz.swift */,
 				580FD70CFDCBB4F3337E5E14 /* Sample.swift */,
+				EA17AB40AA19DE109359777A /* Shell.swift */,
 				629A40E655F36DF22972348D /* Store.swift */,
 				564D0236323E1BA03FD218E1 /* Views.swift */,
 				0DB703D61C9388FBAADEAF86 /* Support */,
@@ -301,6 +304,7 @@
 				79FD44F453E060A99302AEB2 /* Models.swift in Sources */,
 				F053C89B7174B988435FE7C5 /* Quiz.swift in Sources */,
 				FD415AD0912017205EF7839C /* Sample.swift in Sources */,
+				CF116657723E87065957F78D /* Shell.swift in Sources */,
 				8213991C3874646E302C8288 /* Store.swift in Sources */,
 				EA4FB78C65E71212EE22F6EA /* Views.swift in Sources */,
 			);
