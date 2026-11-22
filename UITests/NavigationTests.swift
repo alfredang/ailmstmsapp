@@ -12,6 +12,11 @@ final class NavigationTests: XCTestCase {
     a.lifetime = .keepAlways
     add(a)
   }
+  /// The home header card: one button that carries the full name and opens Account.
+  func homeHeader(_ fullName: String, timeout: TimeInterval) -> Bool {
+    let card = app.buttons["my-profile"]
+    return card.waitForExistence(timeout: timeout) && card.label.contains(fullName)
+  }
   /// Scrolls until the element is on screen (lists build rows lazily), then returns it.
   @discardableResult func reveal(_ element: XCUIElement) -> XCUIElement {
     var tries = 0
@@ -28,7 +33,7 @@ final class NavigationTests: XCTestCase {
     XCTAssertTrue(demo.waitForExistence(timeout: 15))
     demo.tap()
     app.buttons["Learner demo"].tap()
-    XCTAssertTrue(app.staticTexts["Jamie"].waitForExistence(timeout: 10))
+    XCTAssertTrue(homeHeader("Jamie Lim", timeout: 10))
     capture("01-learner-today")
     app.buttons["My Classes"].firstMatch.tap()
     XCTAssertTrue(app.staticTexts["Responsible Generative AI Basics"].waitForExistence(timeout: 10))
@@ -46,7 +51,7 @@ final class NavigationTests: XCTestCase {
     XCTAssertTrue(demo.waitForExistence(timeout: 5))
     demo.tap()
     app.buttons["Trainer demo"].tap()
-    XCTAssertTrue(app.staticTexts["Alex"].waitForExistence(timeout: 5))
+    XCTAssertTrue(homeHeader("Alex Tan", timeout: 5))
     capture("05-trainer-today")
     app.buttons["My Classes"].firstMatch.tap()
     app.staticTexts["Responsible Generative AI Basics"].firstMatch.tap()
@@ -183,7 +188,7 @@ final class NavigationTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Question 1 · Correct"].exists)
     capture("18-quiz-review")
     reveal(app.buttons["quiz-done"]).tap()
-    XCTAssertTrue(app.staticTexts["Jamie"].waitForExistence(timeout: 10))
+    XCTAssertTrue(homeHeader("Jamie Lim", timeout: 10))
 
     // Scanned from the class page: the same quiz now shows the last score first.
     app.buttons["My Classes"].firstMatch.tap()
@@ -216,6 +221,6 @@ final class NavigationTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Question 1 of 3"].waitForExistence(timeout: 15))
     XCTAssertTrue(app.staticTexts["SAMPLE QUIZ"].exists)
     app.buttons["quiz-close"].tap()
-    XCTAssertTrue(app.staticTexts["Jamie"].waitForExistence(timeout: 10))
+    XCTAssertTrue(homeHeader("Jamie Lim", timeout: 10))
   }
 }

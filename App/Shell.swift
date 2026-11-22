@@ -147,31 +147,45 @@ struct TabPage<Content: View>: View {
 
 // MARK: - My Classes (home)
 
-/// Avatar, welcome, the My Profile link and, for the owner account, the role switcher.
+/// Top of My Classes, in the TIA house layout: a "Welcome back" card with the full name,
+/// the role and a My Profile link, then (for the owner account only) a "View as" row.
 struct HomeHeader: View {
   @EnvironmentObject var store: Store
 
-  private var name: String { store.profile?.fullName ?? store.user?.fullName ?? "" }
-  private var firstName: String { name.split(separator: " ").first.map(String.init) ?? "back" }
+  private var fullName: String { store.profile?.fullName ?? store.user?.fullName ?? "" }
+  private var name: String { fullName.isEmpty ? "Welcome" : fullName.uppercased() }
+  private var card: RoundedRectangle { RoundedRectangle(cornerRadius: 18) }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(spacing: 12) {
-        AvatarView(picture: store.profile?.pictureURL, name: name, size: 48)
-        VStack(alignment: .leading, spacing: 1) {
-          Text("Welcome").font(.subheadline).foregroundStyle(.secondary)
-          Text(firstName).font(.title2.bold()).lineLimit(1).minimumScaleFactor(0.7)
+    VStack(spacing: 12) {
+      Button {
+        store.selectedTab = Store.accountTab
+      } label: {
+        VStack(alignment: .leading, spacing: 8) {
+          HStack {
+            Text("Welcome back").font(.subheadline).foregroundStyle(.secondary)
+            Spacer()
+            Image(systemName: "chevron.right").font(.footnote.weight(.semibold))
+              .foregroundStyle(.tertiary)
+          }
+          Text(name).font(.system(size: 26, weight: .heavy)).foregroundStyle(.primary)
+            .multilineTextAlignment(.leading).lineLimit(2).minimumScaleFactor(0.6)
+          HStack(spacing: 12) {
+            Text(Store.roleName(store.role)).font(.subheadline.weight(.semibold))
+              .foregroundStyle(Theme.accent).padding(.horizontal, 12).padding(.vertical, 5)
+              .background(Theme.accentSoft, in: Capsule())
+            Label("My Profile", systemImage: "person.crop.circle")
+              .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.accent)
+          }
         }
-        Spacer(minLength: 8)
-        Button {
-          store.selectedTab = Store.accountTab
-        } label: {
-          Label("My Profile", systemImage: "person.crop.circle").font(.subheadline.weight(.semibold))
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(Theme.accentSoft, in: Capsule())
-        }
-        .buttonStyle(.plain).foregroundStyle(Theme.accent).accessibilityIdentifier("my-profile")
+        .padding(18).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card, in: card).overlay(card.stroke(Theme.cardBorder))
+        .contentShape(card)
       }
+      .buttonStyle(.plain).accessibilityElement(children: .combine)
+      .accessibilityLabel("Welcome back, \(fullName). \(Store.roleName(store.role)). My Profile")
+      .accessibilityIdentifier("my-profile")
+
       if store.canSwitchRole {
         Menu {
           Picker(
@@ -182,14 +196,16 @@ struct HomeHeader: View {
             ForEach(store.availableRoles, id: \.self) { Text(Store.roleName($0)).tag($0) }
           }
         } label: {
-          HStack(spacing: 6) {
-            Image(systemName: "arrow.left.arrow.right")
-            Text("Viewing as \(Store.roleName(store.role))")
+          HStack(spacing: 12) {
+            Image(systemName: "eye.fill").foregroundStyle(Theme.accent)
+            Text("View as").foregroundStyle(.secondary)
             Spacer()
-            Image(systemName: "chevron.up.chevron.down").font(.caption.weight(.bold))
+            Text(Store.roleName(store.role)).fontWeight(.semibold).foregroundStyle(.primary)
+            Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.semibold))
+              .foregroundStyle(.secondary)
           }
-          .font(.subheadline.weight(.semibold)).foregroundStyle(.white).padding(.horizontal, 14)
-          .padding(.vertical, 10).background(Theme.brand, in: RoundedRectangle(cornerRadius: 12))
+          .font(.body).padding(.horizontal, 18).padding(.vertical, 14)
+          .background(Theme.card, in: card).overlay(card.stroke(Theme.cardBorder))
         }
         .accessibilityIdentifier("view-as")
       }
