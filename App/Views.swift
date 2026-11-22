@@ -92,26 +92,52 @@ struct RootView: View {
     }
   }
 }
+/// Sign in with an emailed code (the default) or the LMS/TMS password. Layout follows
+/// the TIA house sign-in: app mark, name, one card, quiet links at the foot.
 struct LoginView: View {
   @EnvironmentObject var store: Store
-  @State var email = ""
+  @State var email = UserDefaults.standard.string(forKey: "rememberedEmail") ?? ""
+  @State var remember = UserDefaults.standard.object(forKey: "rememberEmail") as? Bool ?? true
   @State var otp = ""
   @State var sent = false
   @State var sending = false
   @State var resendAt = Date.distantPast
   @State var usePassword = false
   @State var password = ""
+  @FocusState private var focus: Field?
+  private enum Field { case email, password, code }
+
+  private var trimmedEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
+  private var emailValid: Bool { trimmedEmail.contains("@") && trimmedEmail.contains(".") }
+  private var busy: Bool { store.busy || sending }
+  private var primaryDisabled: Bool {
+    if busy || !emailValid { return true }
+    if usePassword { return password.isEmpty }
+    return sent && otp.count != 6
+  }
+
   var body: some View {
     NavigationStack {
       ScrollView {
-        VStack(alignment: .leading, spacing: 24) {
-          AcademyHeader()
-            .padding(.top, 32)
-          Text("Your academy day,\nready when you are.").font(.largeTitle.bold())
-          Text(
-            "Secure access to the Tertiary courses, teaching kits and Singapore class sessions assigned to you."
-          )
-          .foregroundStyle(.secondary)
+        VStack(spacing: 22) {
+          // App mark and name
+          VStack(spacing: 10) {
+            Text("TIA")
+              .font(.system(size: 32, weight: .black, design: .rounded))
+              .foregroundStyle(.white)
+              .frame(width: 92, height: 92)
+              .background(
+                LinearGradient(
+                  colors: [Theme.brandBlue, Theme.brandNavy], startPoint: .top, endPoint: .bottom),
+                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+              )
+              .shadow(color: Theme.brandBlue.opacity(0.25), radius: 12, y: 6)
+              .accessibilityHidden(true)
+            Text(Theme.name).font(.system(size: 30, weight: .heavy))
+            Text("Tertiary Infotech Academy").font(.subheadline).foregroundStyle(.secondary)
+          }
+          .padding(.top, 12)
+
           if store.pendingQuiz != nil {
             Label(
               "Sign in to take your class quiz. It opens as soon as you are signed in.",
@@ -119,13 +145,23 @@ struct LoginView: View {
             )
             .font(.subheadline.weight(.medium)).padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+            .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 14))
             .accessibilityIdentifier("quiz-pending")
           }
+
+          // The sign-in card
           VStack(alignment: .leading, spacing: 16) {
-            Text("Sign in").font(.title2.bold())
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Sign in").font(.title2.bold())
+              Text(
+                sent && !usePassword
+                  ? "Enter the 6-digit code we emailed you."
+                  : "Enter the email you registered with to continue."
+              )
+              .font(.subheadline).foregroundStyle(.secondary)
+            }
+
             VStack(alignment: .leading, spacing: 6) {
-              Text("Sign in as").font(.subheadline.weight(.semibold))
               Picker("Sign in as", selection: $store.loginChoice) {
                 Text("Learner").tag("learner")
                 Text("Trainer").tag("trainer")
@@ -136,94 +172,171 @@ struct LoginView: View {
                   : "See the courses you are taking. Trainers attending a course sign in as a learner."
               ).font(.footnote).foregroundStyle(.secondary)
             }
-            Picker("Sign-in method", selection: $usePassword) {
-              Text("Email code").tag(false)
-              Text("Password").tag(true)
-            }.pickerStyle(.segmented).disabled(sent).accessibilityIdentifier("sign-in-method")
-            TextField("Registered email address", text: $email).textContentType(.emailAddress)
-              .keyboardType(.emailAddress).textInputAutocapitalization(.never)
-              .autocorrectionDisabled().padding().background(
-                .background, in: RoundedRectangle(cornerRadius: 12)
-              ).disabled(sent && !usePassword).accessibilityIdentifier("email")
-            if usePassword {
-              SecureField("Password", text: $password).textContentType(.password).padding()
-                .background(.background, in: RoundedRectangle(cornerRadius: 12))
-                .accessibilityIdentifier("password")
-              Button {
-                Task {
-                  await store.login(
-                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-                    password: password)
-                  password = ""
-                }
-              } label: {
-                Text(store.busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity).padding(6)
-              }.buttonStyle(.borderedProminent).disabled(
-                store.busy || !email.contains("@") || password.isEmpty)
-              Text("Use the same password as lms-tms.tertiaryinfotech.com.").font(.footnote)
-                .foregroundStyle(.secondary)
-            } else {
-              if sent {
-                Text("Enter the six-digit code sent to your email.").font(.subheadline)
-                TextField("Verification code", text: $otp).keyboardType(.numberPad).textContentType(
-                  .oneTimeCode
-                ).padding().background(.background, in: RoundedRectangle(cornerRadius: 12))
-                  .accessibilityIdentifier("otp").onChange(of: otp) { _, v in
-                    otp = String(v.filter(\.isNumber).prefix(6))
-                  }
-                Button {
-                  Task {
-                    await store.login(
-                      email: email.trimmingCharacters(in: .whitespacesAndNewlines), otp: otp)
-                  }
-                } label: {
-                  Text(store.busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity).padding(6)
-                }.buttonStyle(.borderedProminent).disabled(store.busy || otp.count != 6)
-                Button("Use a different email") {
+
+            inputRow(icon: "envelope.fill") {
+              TextField("Email", text: $email)
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($focus, equals: .email)
+                .submitLabel(usePassword ? .next : .continue)
+                .onSubmit { if usePassword { focus = .password } else { Task { await primary() } } }
+                .onChange(of: email) { _, _ in
                   sent = false
                   otp = ""
                 }
+                .accessibilityIdentifier("email")
+            }
+
+            if usePassword {
+              inputRow(icon: "lock.fill") {
+                SecureField("LMS/TMS password", text: $password)
+                  .textContentType(.password)
+                  .focused($focus, equals: .password)
+                  .submitLabel(.go)
+                  .onSubmit { Task { await primary() } }
+                  .accessibilityIdentifier("password")
               }
-              TimelineView(.periodic(from: .now, by: 1)) { context in
-                Button(
-                  sent
-                    ? (context.date < resendAt
-                      ? "Resend code in \(max(1,Int(resendAt.timeIntervalSince(context.date))))s"
-                      : "Resend code") : "Send verification code"
-                ) { Task { await send() } }.buttonStyle(.bordered).disabled(
-                  sending || !email.contains("@") || context.date < resendAt)
+            } else if sent {
+              inputRow(icon: "number") {
+                TextField("6-digit code", text: $otp)
+                  .keyboardType(.numberPad)
+                  .textContentType(.oneTimeCode)
+                  .focused($focus, equals: .code)
+                  .onChange(of: otp) { _, v in otp = String(v.filter(\.isNumber).prefix(6)) }
+                  .accessibilityIdentifier("otp")
               }
             }
-          }.padding(20).background(
-            Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
-          HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "checkmark.shield.fill").foregroundStyle(Theme.brandBlue)
-            Text(
-              "This is Tertiary Infotech Academy's first-party learning workspace. Sign-in and course access are verified by the academy's own training management system."
-            ).font(.footnote).foregroundStyle(.secondary)
+
+            Toggle(isOn: $remember) { Text("Remember my email").font(.subheadline) }
+              .tint(Theme.brand)
+              .onChange(of: remember) { _, on in
+                UserDefaults.standard.set(on, forKey: "rememberEmail")
+                if !on { UserDefaults.standard.removeObject(forKey: "rememberedEmail") }
+              }
+
+            Button {
+              Task { await primary() }
+            } label: {
+              HStack(spacing: 8) {
+                if busy { ProgressView().tint(.white) } else { Image(systemName: "arrow.right") }
+                Text(usePassword ? "Sign In" : (sent ? "Verify & Sign In" : "Continue"))
+              }
+              .font(.headline)
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, 15)
+              .foregroundStyle(.white)
+              .background(
+                Theme.brand.opacity(primaryDisabled ? 0.45 : 1),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(primaryDisabled)
+            .accessibilityIdentifier(usePassword ? "sign-in" : "continue")
+
+            HStack {
+              if !usePassword, sent {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                  Button(
+                    context.date < resendAt
+                      ? "New code in \(max(1, Int(resendAt.timeIntervalSince(context.date))))s"
+                      : "Send a new code"
+                  ) { Task { await send() } }
+                  .disabled(busy || context.date < resendAt)
+                }
+              } else if usePassword {
+                Link(
+                  "Forgot your password?",
+                  destination: URL(string: "https://lms-tms.tertiaryinfotech.com/")!)
+              }
+              Spacer()
+              Button(usePassword ? "Use email code instead" : "Use password instead") {
+                usePassword.toggle()
+                sent = false
+                otp = ""
+                password = ""
+              }
+              .accessibilityIdentifier("sign-in-method")
+            }
+            .font(.footnote.weight(.medium))
           }
-          Menu("Explore sample app") {
-            Button("Learner demo") { store.openDemo("learner") }
-            Button("Trainer demo") { store.openDemo("trainer") }
-          }.accessibilityIdentifier("demo")
-          Link(
-            "Privacy policy",
-            destination: URL(string: "https://lms-tms.tertiaryinfotech.com/mobile/privacy.html")!
-          ).font(.footnote)
-        }.padding(24).frame(maxWidth: 620)
-      }.background(Color(.systemGroupedBackground)).navigationTitle(Theme.name)
-        .navigationBarTitleDisplayMode(.inline)
+          .padding(20)
+          .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+          .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Theme.cardBorder))
+
+          VStack(spacing: 10) {
+            Text("Use the email your training provider registered for your class.")
+              .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            HStack(spacing: 16) {
+              // A look around with sample data, for anyone without an account (and App Review).
+              Menu("Try a demo") {
+                Button("As a learner") { store.openDemo("learner") }
+                Button("As a trainer") { store.openDemo("trainer") }
+              }.accessibilityIdentifier("demo")
+              Link(
+                "Privacy policy",
+                destination: URL(string: "https://lms-tms.tertiaryinfotech.com/mobile/privacy.html")!)
+            }
+            .font(.footnote)
+            .tint(.secondary)
+          }
+          .padding(.horizontal, 8)
+        }
+        .padding(20)
+        .frame(maxWidth: 620)
+        .frame(maxWidth: .infinity)
+      }
+      .background(
+        LinearGradient(colors: [Theme.page, Theme.accentSoft], startPoint: .top, endPoint: .bottom)
+          .ignoresSafeArea()
+      )
+      .scrollDismissesKeyboard(.interactively)
+      .toolbar(.hidden, for: .navigationBar)
     }
   }
+
+  private func inputRow<Content: View>(icon: String, @ViewBuilder content: () -> Content)
+    -> some View
+  {
+    HStack(spacing: 12) {
+      Image(systemName: icon).foregroundStyle(.secondary).frame(width: 22)
+      content()
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 14)
+    .background(Theme.page, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.cardBorder, lineWidth: 1))
+  }
+
+  private func rememberEmail() {
+    if remember { UserDefaults.standard.set(trimmedEmail, forKey: "rememberedEmail") }
+  }
+
+  private func primary() async {
+    guard !primaryDisabled else { return }
+    rememberEmail()
+    if usePassword {
+      await store.login(email: trimmedEmail, password: password)
+      password = ""
+    } else if sent {
+      await store.login(email: trimmedEmail, otp: otp)
+    } else {
+      await send()
+    }
+  }
+
   func send() async {
     sending = true
     defer { sending = false }
     do {
       let _: EmptyReply = try await API.shared.request(
-        "mobile/auth", method: "POST",
-        body: ["action": "send", "email": email.trimmingCharacters(in: .whitespacesAndNewlines)])
+        "mobile/auth", method: "POST", body: ["action": "send", "email": trimmedEmail])
       sent = true
+      otp = ""
       resendAt = Date().addingTimeInterval(60)
+      focus = .code
     } catch { store.error = error.localizedDescription }
   }
 }
