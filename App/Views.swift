@@ -293,8 +293,8 @@ struct LoginView: View {
       .scrollDismissesKeyboard(.interactively)
       .toolbar(.hidden, for: .navigationBar)
       .sheet(isPresented: $showAdmin) {
-        AdminSignInPage(appName: Theme.name, busy: googleBusy, error: adminError) {
-          Task { await signInAsAdmin() }
+        AdminSignInPage(appName: Theme.name, busy: googleBusy, error: adminError) { remember in
+          Task { await signInAsAdmin(remember: remember) }
         }
       }
     }
@@ -332,13 +332,14 @@ struct LoginView: View {
   }
 
   /// Admin sign-in: Google in the system sign-in sheet, for allow-listed admin accounts only.
-  private func signInAsAdmin() async {
+  private func signInAsAdmin(remember: Bool) async {
     googleBusy = true
     adminError = nil
     defer { googleBusy = false }
     do {
-      let result = try await google.start()
+      let result = try await google.start(ephemeral: !remember)
       try await store.loginWithGoogle(code: result.code, verifier: result.verifier)
+      AdminRemember.signedIn(email: store.user?.email ?? "")
       showAdmin = false
     } catch GoogleAdminSignIn.Failure.cancelled {
       // Closed the Google sheet: nothing to report.
@@ -607,7 +608,8 @@ final class GoogleAdminSignIn: NSObject, ASWebAuthenticationPresentationContextP
 
   private var session: ASWebAuthenticationSession?
 
-  func start() async throws -> (code: String, verifier: String) {
+  /// `ephemeral`: do not keep the Google sign-in in the browser (Remember me off).
+  func start(ephemeral: Bool = false) async throws -> (code: String, verifier: String) {
     var bytes = [UInt8](repeating: 0, count: 32)
     _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
     let verifier = bytes.map { String(format: "%02x", $0) }.joined()
@@ -631,6 +633,7 @@ final class GoogleAdminSignIn: NSObject, ASWebAuthenticationPresentationContextP
         }
       }
       s.presentationContextProvider = self
+      s.prefersEphemeralWebBrowserSession = ephemeral
       session = s
       if !s.start() {
         continuation.resume(

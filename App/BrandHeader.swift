@@ -32,8 +32,11 @@ struct AdminSignInPage: View {
     let appName: String
     let busy: Bool
     let error: String?
-    let signIn: () -> Void
+    /// Called with the "Remember me" choice: true keeps the Google sign-in on this device.
+    let signIn: (_ remember: Bool) -> Void
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(AdminRemember.enabledKey) private var remember = true
+    @AppStorage(AdminRemember.emailKey) private var rememberedEmail = ""
 
     var body: some View {
         NavigationStack {
@@ -44,11 +47,20 @@ struct AdminSignInPage: View {
                     VStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Admin sign-in").font(.title2.bold())
-                            Text("For academy administrators. Continue with your company Google account.")
+                            Text(remember && !rememberedEmail.isEmpty
+                                 ? "Continue as \(rememberedEmail)."
+                                 : "For academy administrators. Continue with your company Google account.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
-                        GoogleSignInButton(loading: busy, enabled: !busy, action: signIn)
+                        GoogleSignInButton(loading: busy, enabled: !busy) { signIn(remember) }
+                        Toggle(isOn: $remember) {
+                            Text("Remember me on this device").font(.subheadline)
+                        }
+                        .tint(Color(red: 0.04, green: 0.24, blue: 0.56))
+                        .disabled(busy)
+                        .onChange(of: remember) { _, on in if !on { rememberedEmail = "" } }
+                        .accessibilityIdentifier("adminRemember")
                         if let error {
                             Label(error, systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
@@ -73,6 +85,18 @@ struct AdminSignInPage: View {
                 }
             }
         }
+    }
+}
+
+/// "Remember me" on the admin page. On: the Google sign-in is kept on this device (one tap
+/// next time) and the page greets the remembered account. Off: Google asks every time.
+enum AdminRemember {
+    static let enabledKey = "adminRemember"
+    static let emailKey = "adminRememberedEmail"
+    static var enabled: Bool { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
+    /// Call after a successful admin sign-in.
+    static func signedIn(email: String) {
+        UserDefaults.standard.set(enabled ? email.lowercased() : "", forKey: emailKey)
     }
 }
 
