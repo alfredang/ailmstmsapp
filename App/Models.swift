@@ -30,25 +30,32 @@ struct Course: Codable, Identifiable {
   let guideURL: String?
   let activitiesURL: String?
   let trainerSlidesURL: String?
+  /// The run's class status from the TMS: Confirmed, Pending, Unconfirmed or Reschedule.
+  var classStatus: String? = nil
+  /// Only confirmed classes appear in the calendar.
+  var isConfirmed: Bool { classStatus?.lowercased() == "confirmed" }
 
+  /// Shown until the class detail loads; same names and order as the website's Courseware.
   func materials(for role: String) -> [CourseMaterial] {
-    var items = [
-      CourseMaterial(
-        id: "slides", title: "Learner slides", symbol: "rectangle.on.rectangle", rawURL: slidesURL),
-      CourseMaterial(
-        id: "guide", title: "Learner Guide", symbol: "book.closed.fill", rawURL: guideURL),
-      CourseMaterial(
-        id: "activities", title: "Labs & activities", symbol: "laptopcomputer",
-        rawURL: activitiesURL),
-    ]
+    let guide = CourseMaterial(
+      id: "guide", title: "Learner Guide", symbol: "book.closed.fill", rawURL: guideURL)
+    let activities = CourseMaterial(
+      id: "activities", title: "Activities/Lab", symbol: "laptopcomputer", rawURL: activitiesURL)
     if role == "trainer" {
-      items.insert(
+      return [
+        guide,
         CourseMaterial(
-          id: "trainer-slides", title: "Trainer slides", symbol: "person.crop.rectangle",
+          id: "trainer-slides", title: "Trainer Slides", symbol: "person.crop.rectangle",
           rawURL: trainerSlidesURL),
-        at: 0)
+        activities,
+      ]
     }
-    return items
+    return [
+      guide,
+      CourseMaterial(
+        id: "slides", title: "Learner Slides", symbol: "rectangle.on.rectangle", rawURL: slidesURL),
+      activities,
+    ]
   }
 }
 struct CourseMaterial: Identifiable {
@@ -98,12 +105,16 @@ struct ClassSession: Codable, Identifiable {
       : "\(digits.prefix(4))-\(digits.dropFirst(4).prefix(2))-\(digits.dropFirst(6).prefix(2))"
     let td = (time ?? "09:00").filter(\.isNumber)
     let clock = td.count >= 4 ? "\(td.prefix(2)):\(td.dropFirst(2).prefix(2))" : "09:00"
+    return parser.date(from: date + " " + clock)
+  }
+  /// Shared: building a DateFormatter per call made the month calendar slow.
+  private static let parser: DateFormatter = {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.timeZone = TimeZone(identifier: "Asia/Singapore")
     formatter.dateFormat = "yyyy-MM-dd HH:mm"
-    return formatter.date(from: date + " " + clock)
-  }
+    return formatter
+  }()
 }
 enum Theme {
   /// Premium blue. Lighter in dark mode so text and icons keep their contrast.
@@ -222,6 +233,23 @@ struct Payout: Decodable, Identifiable {
 
 struct PayoutReply: Decodable { let data: [Payout] }
 
+/// One confirmed class the trainer has taught (GET /api/mobile/hours). Hours are the
+/// course's training + assessment hours, as on the web Training Hours page.
+struct TaughtClass: Decodable, Identifiable {
+  let id: String
+  let title: String
+  let code: String?
+  let runCode: String?
+  let startDate: String
+  let endDate: String
+  let trainingHours: Double
+  let assessmentHours: Double
+  var totalHours: Double { trainingHours + assessmentHours }
+  /// "2026-11" from the start date, for grouping by month.
+  var monthKey: String { String(startDate.prefix(7)) }
+}
+struct HoursReply: Decodable { let data: [TaughtClass] }
+
 /// Dates and money as the tabs show them.
 enum Fmt {
   static func day(_ raw: String?) -> Date? {
@@ -243,6 +271,19 @@ enum Fmt {
     if a.isEmpty { return b.isEmpty ? "Dates to be confirmed" : b }
     return b.isEmpty || a == b ? a : "\(a) – \(b)"
   }
+  static func hours(_ value: Double) -> String {
+    let text = value.formatted(.number.precision(.fractionLength(value.rounded() == value ? 0 : 1)))
+    return "\(text) h"
+  }
+  /// "November 2026" from "2026-11".
+  static func month(_ key: String) -> String {
+    guard let date = day(key + "-01") else { return key }
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_SG")
+    f.timeZone = TimeZone(identifier: "Asia/Singapore")
+    f.dateFormat = "MMMM yyyy"
+    return f.string(from: date)
+  }
   static func money(_ amount: Double) -> String {
     amount.formatted(
       .currency(code: "SGD").precision(.fractionLength(amount.rounded() == amount ? 0 : 2)))
@@ -262,8 +303,60 @@ struct ClassMaterial: Codable, Identifiable, Hashable {
     case "lesson-plan": return "list.bullet.clipboard"
     case "facilitator-guide": return "person.2.badge.gearshape"
     case "assessment-plan": return "checklist"
+    case "courseware-link": return "folder"
+    case "lab-simulator": return "flask"
+    case "practice-exam": return "graduationcap"
+    case "skillsfuture": return "link"
     default: return "doc"
     }
+  }
+
+  /// The website's name for this item, so an older server's "Trainer slides" or
+  /// "Labs & activities" still reads "Trainer Slides" and "Activities/Lab".
+  var websiteTitle: String {
+    switch id {
+    case "courseware-link": return "Courseware Link"
+    case "lesson-plan": return "Lesson Plan"
+    case "guide": return "Learner Guide"
+    case "facilitator-guide": return "Facilitator Guide"
+    case "trainer-slides": return "Trainer Slides"
+    case "slides": return "Learner Slides"
+    case "activities": return "Activities/Lab"
+    case "lab-simulator": return "Lab Simulator"
+    case "practice-exam": return "Practice Exam"
+    case "assessment-plan": return "Assessment Plan"
+    case "skillsfuture": return "SkillsFuture Link"
+    default: return title
+    }
+  }
+
+  /// The order of the website's Courseware section for each role.
+  static func websiteOrder(trainer: Bool) -> [String] {
+    trainer
+      ? ["courseware-link", "lesson-plan", "guide", "facilitator-guide", "trainer-slides",
+         "activities", "lab-simulator", "practice-exam", "assessment-plan", "skillsfuture"]
+      : ["lesson-plan", "guide", "slides", "activities", "lab-simulator", "practice-exam",
+         "skillsfuture"]
+  }
+}
+
+extension Array where Element == ClassMaterial {
+  /// Website order and names; items the website does not show for the role
+  /// (e.g. Learner Slides for a trainer) are dropped, unknown items go last.
+  func asOnWebsite(trainer: Bool) -> [ClassMaterial] {
+    let order = ClassMaterial.websiteOrder(trainer: trainer)
+    let known: Set<String> = ["courseware-link", "lesson-plan", "guide", "facilitator-guide",
+      "trainer-slides", "slides", "activities", "lab-simulator", "practice-exam",
+      "assessment-plan", "skillsfuture"]
+    return self
+      .filter { order.contains($0.id) || !known.contains($0.id) }
+      .enumerated()
+      .sorted { a, b in
+        let ra = order.firstIndex(of: a.element.id) ?? order.count + a.offset
+        let rb = order.firstIndex(of: b.element.id) ?? order.count + b.offset
+        return ra < rb
+      }
+      .map { ClassMaterial(id: $0.element.id, title: $0.element.websiteTitle, url: $0.element.url) }
   }
 }
 
@@ -333,6 +426,54 @@ struct ClassDetail: Codable {
   var feedback: FeedbackState?
   var roster: [RosterLearner]?
   var feedbackCount: Int?
+  /// Trainer: the Post Course Feedback Summary (averages and comments, no names).
+  var feedbackSummary: FeedbackSummary? = nil
+  // The website class page's panels. Optional, so an older server reply still decodes.
+  var courseDetails: CourseDetails? = nil
+  var trainerNames: [String]? = nil
+  var digitalAttendanceId: String? = nil
+  var announcements: [Announcement]? = nil
+  var briefingOnAssessment: [String]? = nil
+  /// The provider shows the Course Feedback card beside TRAQOM Survey.
+  var showCourseFeedback: Bool? = nil
+  /// Trainer: the Course Feedback link learners scan (may be a path on the portal).
+  var courseFeedbackURL: String? = nil
+  /// Trainer: the class's public SWDA enrolment form (a path on the portal).
+  var swdaEnrolmentURL: String? = nil
+}
+
+/// The class's Post Course Feedback Summary: average per 1–5 question, overall average, comments.
+struct FeedbackSummary: Codable {
+  struct Question: Codable, Hashable {
+    let label: String
+    let average: Double?
+  }
+  let count: Int
+  let overall: Double?
+  let questions: [Question]
+  let comments: [String]
+}
+
+/// The website class page's "Course Details" panel.
+struct CourseDetails: Codable {
+  var tscTitle: String?
+  var tscCode: String?
+  var caslSkills: String?
+  var fundingValidityStart: String?
+  var fundingValidityEnd: String?
+  var trainingHours: Double?
+  var assessmentHours: Double?
+}
+
+struct Announcement: Codable, Identifiable {
+  let id: String
+  var title: String?
+  var message: String?
+  var linkURL: String?
+  var fileName: String?
+  var fileURL: String?
+  var postedBy: String?
+  var createdAt: String?
 }
 
 struct AttendanceLearner: Codable, Identifiable {

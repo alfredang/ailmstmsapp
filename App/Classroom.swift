@@ -157,39 +157,46 @@ struct CourseDetail: View {
   @State private var problem: String?
   @State private var notice: String?
   @State private var scanning = false
-  @State private var traqomQR = false
+  /// Sections the user has opened. Every section starts collapsed, like the website's cards.
+  @State private var open: Set<String> = []
 
   private var trainer: Bool { store.role == "trainer" }
+  /// The Course Run ID as the website prints it ("Open E-Attendance for Course Run 1361797").
+  private var runID: String { detail?.runCode ?? "" }
 
+
+  // Same sections, names and order as the class page on lms-tms.tertiaryinfotech.com.
   var body: some View {
     List {
-      Section {
-        Text(course.title).font(.title2.bold())
-        LabeledContent("Course code", value: course.code ?? "—")
-        if let run = detail?.runCode, !run.isEmpty { LabeledContent("Class", value: run) }
-        LabeledContent("Delivery", value: course.format ?? "—")
-        if let venue = course.venue, !venue.isEmpty { Label(venue, systemImage: "mappin.and.ellipse") }
-        if let link = course.meetingURL, !link.isEmpty {
-          MaterialLink(title: "Join online class", icon: "video", raw: link)
-        }
-        JourneyProgress(course: course)
-      }
-
-      materials
+      summary
+      courseDetails
 
       if let detail {
-        attendance(detail)
+        eAttendance(detail)
+        if trainer { swdaEnrolment(detail.swdaEnrolmentURL ?? "/enrol/\(detail.id)") }
+        announcements(detail)
+        courseware
         if !trainer { quizzes }
-        assessments(detail)
-        if trainer { roster(detail) }
-        surveys(detail)
+        // Course Feedback, TRAQOM and the Briefing are for learners; trainers do not fill them in.
+        if !trainer {
+          feedbackAndTraqom(detail)
+          briefing(detail)
+        }
+        assessment(detail)
+        summaryRecord(detail)
+        if trainer {
+          grading(detail)
+          feedbackSummary(detail)
+        }
       } else if let problem {
+        courseware
         Section {
           Label(problem, systemImage: "wifi.exclamationmark").foregroundStyle(.secondary)
           Button("Try again") { Task { await load() } }
         }
       } else {
-        Section { ProgressView("Loading attendance and assessments…") }
+        courseware
+        Section { ProgressView("Loading class details…") }
       }
     }
     .navigationTitle("Class details").navigationBarTitleDisplayMode(.inline)
@@ -200,15 +207,6 @@ struct CourseDetail: View {
       Button("OK") { notice = nil }
     } message: {
       Text(notice ?? "")
-    }
-    .sheet(isPresented: $traqomQR) {
-      QRCodeSheet(
-        title: course.title,
-        text: URL(string: detail?.traqomURL ?? "", relativeTo: API.shared.base)?.absoluteString
-          ?? "",
-        heading: "TRAQOM Survey",
-        hint: "Learners scan this with their phone camera to open the TRAQOM survey.",
-        shareLabel: "Share Link")
     }
     .sheet(isPresented: $scanning) {
       QRScannerSheet { code in
@@ -237,34 +235,182 @@ struct CourseDetail: View {
     }
   }
 
-  // Courseware comes from the class detail when loaded (it carries the role's full kit);
-  // until then the dashboard's links are shown so the screen is useful immediately.
-  @ViewBuilder private var materials: some View {
-    Section {
-      if let detail {
-        if detail.materials.isEmpty {
-          Label("No courseware published yet", systemImage: "tray").foregroundStyle(.secondary)
+  private static func hrs(_ value: Double?) -> String {
+    guard let value else { return "N/A" }
+    let text = value.formatted(.number.precision(.fractionLength(value.rounded() == value ? 0 : 1)))
+    return "\(text) \(value == 1 ? "hr" : "hrs")"
+  }
+
+  // MARK: Collapsible cards
+
+  /// A website-style card: a tappable title row with a chevron; the rows show only when open.
+  private func fold<C: View, F: View>(
+    _ title: String, icon: String, @ViewBuilder _ content: () -> C,
+    @ViewBuilder footer: () -> F
+  ) -> some View {
+    let isOpen = open.contains(title)
+    return Section {
+      Button {
+        withAnimation(.snappy) {
+          if isOpen { open.remove(title) } else { open.insert(title) }
         }
-        ForEach(detail.materials) { item in
-          DocumentRow(
-            courseID: course.id,
-            material: CourseMaterial(
-              id: item.id, title: item.title, symbol: item.symbol, rawURL: item.url))
+      } label: {
+        HStack(spacing: 12) {
+          Image(systemName: icon).font(.body.weight(.semibold)).foregroundStyle(Theme.accent)
+            .frame(width: 26)
+          Text(title).font(.headline).foregroundStyle(.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+          Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
+            .foregroundStyle(Theme.accent).rotationEffect(.degrees(isOpen ? 180 : 0))
         }
-      } else {
-        ForEach(course.materials(for: store.role)) { material in
-          DocumentRow(courseID: course.id, material: material)
-        }
+        .padding(.vertical, 6).contentShape(Rectangle())
       }
-    } header: {
-      Text(trainer ? "Teaching kit" : "Courseware")
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("section-\(title)")
+      .accessibilityValue(isOpen ? "Expanded" : "Collapsed")
+      if isOpen { content() }
     } footer: {
-      Text("PDF courseware opens inside the app. Other links open in the browser.")
+      if isOpen { footer() }
     }
   }
 
-  @ViewBuilder private func attendance(_ detail: ClassDetail) -> some View {
-    Section {
+  private func fold<C: View>(_ title: String, icon: String, @ViewBuilder _ content: () -> C)
+    -> some View
+  {
+    fold(title, icon: icon, content) { EmptyView() }
+  }
+
+  // MARK: Summary / Course Details / Class Details
+
+  /// Non-empty text, or nil, so empty fields are left out on the phone instead of "N/A".
+  private static func value(_ raw: String?) -> String? {
+    guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+    return raw
+  }
+  private static func day(_ raw: String?) -> String? {
+    value(raw).map { Fmt.longDate($0) }.flatMap(value)
+  }
+
+  /// Always-visible class summary at the top: what, when, where, who.
+  private var summary: some View {
+    let status = detail?.classStatus ?? course.classStatus
+    let start = Self.day(detail?.startDate ?? course.startDate)
+    let end = Self.day(detail?.endDate ?? course.endDate)
+    let trainers = detail?.trainerNames ?? []
+    return Section {
+      VStack(alignment: .leading, spacing: 10) {
+        Text(detail?.title ?? course.title).font(.title3.weight(.bold))
+          .fixedSize(horizontal: false, vertical: true)
+        Text(
+          [Self.value(detail?.code ?? course.code), Self.value(detail?.runCode).map { "Run \($0)" }]
+            .compactMap { $0 }.joined(separator: "  ·  ")
+        ).font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+          StatusChip(text: detail?.format ?? course.format ?? "Physical", color: Theme.accent)
+          if let status {
+            StatusChip(
+              text: status,
+              color: status.lowercased() == "confirmed"
+                ? .green : status.lowercased() == "cancelled" ? .red : .orange)
+          }
+        }
+        if let start {
+          Label(end.map { $0 == start ? start : "\(start) – \($0)" } ?? start, systemImage: "calendar")
+            .font(.subheadline)
+        }
+        if let venue = Self.value(detail?.venue) {
+          VenueLink(address: venue)
+        }
+        if !trainers.isEmpty {
+          Label {
+            Text(trainers.count > 1 ? "Trainers: " : "Trainer: ").foregroundStyle(.secondary)
+              + Text(trainers.joined(separator: ", ")).fontWeight(.semibold)
+          } icon: {
+            Image(systemName: "person.fill")
+          }
+          .font(.subheadline).accessibilityIdentifier("summary-trainer")
+        }
+        // Hybrid and online classes: the meeting link one tap away, not inside a folded card.
+        if let link = meetingLink {
+          JoinMeetingButton(raw: link, prominent: true).padding(.top, 4)
+        }
+      }
+      .padding(.vertical, 6)
+    }
+  }
+
+  private var courseDetails: some View {
+    let info = detail?.courseDetails
+    let fundStart = Self.day(info?.fundingValidityStart)
+    let fundEnd = Self.day(info?.fundingValidityEnd)
+    let expired = Fmt.day(info?.fundingValidityEnd).map { $0 < Date() }
+    let training = info?.trainingHours
+    let assessment = info?.assessmentHours
+    // Title, code, run, dates, class type and status are on the summary card; only the rest is here.
+    let hasAny = [info?.tscTitle, info?.tscCode, info?.caslSkills, fundStart, fundEnd]
+      .contains { Self.value($0) != nil } || training != nil || assessment != nil
+    return Group {
+      if hasAny { courseDetailsCard(info, fundStart, fundEnd, expired, training, assessment) }
+    }
+  }
+
+  private func courseDetailsCard(
+    _ info: CourseDetails?, _ fundStart: String?, _ fundEnd: String?, _ expired: Bool?,
+    _ training: Double?, _ assessment: Double?
+  ) -> some View {
+    fold("Course Details", icon: "info.circle") {
+      if let title = Self.value(info?.tscTitle) { InfoRow("TSC Title", title) }
+      if let code = Self.value(info?.tscCode) { InfoRow("TSC Code", code) }
+      if let casl = Self.value(info?.caslSkills) { InfoRow("CASL Skills", casl) }
+      if fundStart != nil || fundEnd != nil {
+        VStack(alignment: .leading, spacing: 6) {
+          Text("Funding Validity").font(.caption).foregroundStyle(.secondary)
+          HStack(alignment: .firstTextBaseline) {
+            Text("\(fundStart ?? "N/A") – \(fundEnd ?? "N/A")").font(.body.monospacedDigit())
+            Spacer(minLength: 8)
+            if let expired {
+              StatusChip(text: expired ? "Expired" : "Valid", color: expired ? .red : .green)
+            }
+          }
+        }
+      }
+      if training != nil || assessment != nil {
+        HStack(spacing: 8) {
+          HoursTile(label: "Training", value: Self.hrs(training))
+          HoursTile(label: "Assessment", value: Self.hrs(assessment))
+          HoursTile(label: "Total", value: Self.hrs((training ?? 0) + (assessment ?? 0)), strong: true)
+        }
+        .padding(.vertical, 4)
+      }
+    }
+  }
+
+  // MARK: E-Attendance / SWDA Enrolment
+
+  @ViewBuilder private func eAttendance(_ detail: ClassDetail) -> some View {
+    fold("E-Attendance", icon: "checklist.checked") {
+      if let da = Self.value(detail.digitalAttendanceId) {
+        InfoRow("Digital Attendance ID", da)
+      }
+      if trainer, let da = Self.value(detail.digitalAttendanceId) {
+        // The website's trainer E-Attendance links, built from the Digital Attendance ID.
+        HStack(spacing: 10) {
+          SSGLinkButton(
+            title: "SSG QR Attendance", icon: "qrcode",
+            raw: "https://www.myskillsfuture.gov.sg/spface/splogin/select-session?course-run-code=\(da)")
+          SSGLinkButton(
+            title: "SSG E-Attendance List", icon: "list.bullet.rectangle",
+            raw: "https://www.myskillsfuture.gov.sg/api/take-attendance/\(da)")
+        }
+        .padding(.vertical, 4)
+      } else if let link = detail.ssgAttendanceURL {
+        PortalLink(
+          title: "E-Attendance", subtitle: "Open E-Attendance for Course Run \(runID)",
+          icon: "checklist.checked", raw: link)
+      } else if !trainer {
+        Text("E-Attendance link not yet available for this course run.").font(.subheadline)
+          .italic().foregroundStyle(.secondary)
+      }
       if detail.sessions.isEmpty {
         Label("Session times to be confirmed", systemImage: "clock").foregroundStyle(.secondary)
       }
@@ -286,24 +432,84 @@ struct CourseDetail: View {
           Label("Scan class QR to check in", systemImage: "qrcode.viewfinder")
         }.accessibilityIdentifier("scan-checkin")
       }
-      if let link = detail.ssgAttendanceURL {
-        MaterialLink(
-          title: trainer ? "Open SSG attendance QR" : "SSG e-attendance (Singpass)",
-          icon: "person.badge.shield.checkmark", raw: link)
-      }
-    } header: {
-      Text("Attendance")
     } footer: {
       Text(
         trainer
-          ? "Open a session to show its check-in QR code or mark attendance yourself. SSG e-attendance is taken on MySkillsFuture."
-          : "Scan the QR code your trainer shows in class. SSG e-attendance is taken separately on MySkillsFuture with Singpass."
+          ? "SSG QR Attendance and SSG E-Attendance List open on MySkillsFuture. Open a session below to mark attendance in the LMS."
+          : "E-Attendance is taken on MySkillsFuture with Singpass. Also scan the class QR code your trainer shows."
       )
     }
   }
 
+  private func swdaEnrolment(_ link: String) -> some View {
+    fold("SWDA Enrolment", icon: "person.crop.circle.badge.plus") {
+      PortalLink(
+        title: "Open SWDA Enrolment Form",
+        subtitle: [
+          (detail?.code ?? course.code).map { "Course Code: \($0)" },
+          runID.isEmpty ? nil : "Course Run ID: \(runID)",
+        ].compactMap { $0 }.joined(separator: " · "),
+        icon: "person.crop.circle.badge.plus", raw: link)
+    } footer: {
+      Text("For learners not yet enrolled on SWDA. The academy then enrols them on TPGateway.")
+    }
+  }
+
+  // MARK: Announcements / Virtual Class Link / Courseware
+
+  @ViewBuilder private func announcements(_ detail: ClassDetail) -> some View {
+    fold("Announcements", icon: "megaphone") {
+      let items = detail.announcements ?? []
+      if items.isEmpty {
+        Text("No announcements yet.").font(.subheadline).foregroundStyle(.secondary)
+      }
+      ForEach(items) { item in
+        VStack(alignment: .leading, spacing: 6) {
+          if let title = item.title, !title.isEmpty { Text(title).font(.headline) }
+          if let message = item.message, !message.isEmpty { Text(message).font(.subheadline) }
+          Text(
+            [item.postedBy, item.createdAt.map { Fmt.longDate(String($0.prefix(10))) }]
+              .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+          ).font(.caption).foregroundStyle(.secondary)
+          if let link = item.linkURL { MaterialLink(title: "Open link", icon: "link", raw: link) }
+          if let file = item.fileURL {
+            MaterialLink(title: item.fileName ?? "Attachment", icon: "paperclip", raw: file)
+          }
+        }
+        .padding(.vertical, 2)
+      }
+    }
+  }
+
+  private var meetingLink: String? { Self.value(detail?.meetingURL ?? course.meetingURL) }
+
+  // Courseware comes from the class detail when loaded (it carries the role's full list);
+  // until then the dashboard's links are shown so the screen is useful immediately.
+  @ViewBuilder private var courseware: some View {
+    fold("Courseware", icon: "folder") {
+      if let detail {
+        let items = detail.materials.asOnWebsite(trainer: trainer)
+        if items.isEmpty {
+          Label("No courseware published yet", systemImage: "tray").foregroundStyle(.secondary)
+        }
+        ForEach(items) { item in
+          DocumentRow(
+            courseID: course.id,
+            material: CourseMaterial(
+              id: item.id, title: item.title, symbol: item.symbol, rawURL: item.url))
+        }
+      } else {
+        ForEach(course.materials(for: store.role)) { material in
+          DocumentRow(courseID: course.id, material: material)
+        }
+      }
+    } footer: {
+      Text("PDF courseware opens inside the app. Other links open in the browser.")
+    }
+  }
+
   private var quizzes: some View {
-    Section {
+    fold("Lesson", icon: "book") {
       Button {
         scanning = true
       } label: {
@@ -316,8 +522,6 @@ struct CourseDetail: View {
           Label("Try the sample quiz", systemImage: "play.circle")
         }.accessibilityIdentifier("sample-quiz")
       }
-    } header: {
-      Text("Class quiz")
     } footer: {
       Text(
         "When your trainer shows a quiz QR code, scan it here or with your phone camera. The quiz opens in the app and your score is saved to your class."
@@ -325,8 +529,56 @@ struct CourseDetail: View {
     }
   }
 
-  @ViewBuilder private func assessments(_ detail: ClassDetail) -> some View {
-    Section {
+  // MARK: Course Feedback & TRAQOM Survey / Briefing on Assessment
+
+  @ViewBuilder private func feedbackAndTraqom(_ detail: ClassDetail) -> some View {
+    // An older server sends no flag; show Course Feedback then, as the website does for this academy.
+    let withFeedback = detail.showCourseFeedback ?? true
+    let feedbackLink = detail.courseFeedbackURL ?? "/feedback/\(detail.id)"
+    fold(withFeedback ? "Course Feedback & TRAQOM Survey" : "TRAQOM Survey", icon: "star.bubble") {
+      if !trainer, let feedback = detail.feedback {
+        if let external = feedback.externalURL {
+          MaterialLink(title: "Course Feedback", icon: "star.bubble", raw: external)
+        } else if feedback.submitted {
+          Label("Course feedback sent. Thank you.", systemImage: "checkmark.circle.fill")
+            .foregroundStyle(Theme.accent)
+        } else if feedback.enabled {
+          NavigationLink {
+            CourseFeedbackView(courseID: course.id) { Task { await load() } }
+          } label: {
+            Label("Course Feedback", systemImage: "star.bubble")
+          }.accessibilityIdentifier("course-feedback")
+        }
+      }
+      if trainer, withFeedback {
+        PortalLink(
+          title: "Open Course Feedback Form", subtitle: "Opens the form in the app",
+          icon: "star.bubble", raw: feedbackLink
+        ).accessibilityIdentifier("open-feedback-form")
+      }
+      if let traqom = detail.traqomURL {
+        MaterialLink(title: "TRAQOM Survey", icon: "list.clipboard", raw: traqom)
+      }
+    } footer: {
+      Text("Your feedback helps us improve. TRAQOM is the SkillsFuture Singapore training quality survey.")
+    }
+  }
+
+  @ViewBuilder private func briefing(_ detail: ClassDetail) -> some View {
+    if let points = detail.briefingOnAssessment, !points.isEmpty {
+      fold("Briefing on Assessment", icon: "list.bullet.clipboard") {
+        ForEach(points, id: \.self) { point in
+          Label(point, systemImage: "circle.fill").labelStyle(BulletLabel())
+            .font(.subheadline)
+        }
+      }
+    }
+  }
+
+  // MARK: Assessment and records
+
+  @ViewBuilder private func assessment(_ detail: ClassDetail) -> some View {
+    fold("Assessment", icon: "doc.text") {
       if detail.assessments.isEmpty {
         Label(
           trainer ? "No assessments set for this course" : "No assessment is open yet",
@@ -335,11 +587,7 @@ struct CourseDetail: View {
       }
       ForEach(detail.assessments) { item in
         if trainer {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(item.label)
-            Text(item.published ? "Published to learners" : "Not published yet").font(.caption)
-              .foregroundStyle(.secondary)
-          }
+          PublishToggle(runID: detail.id, item: item) { Task { await load() } }
         } else {
           NavigationLink {
             AssessmentView(courseID: course.id, type: item.type)
@@ -354,63 +602,307 @@ struct CourseDetail: View {
           }
         }
       }
-      if !trainer, let status = detail.assessmentStatus, !status.isEmpty {
-        LabeledContent("Result", value: status)
-      }
-    } header: {
-      Text("Assessments")
     }
   }
 
-  @ViewBuilder private func roster(_ detail: ClassDetail) -> some View {
-    Section {
+  private func summaryRecord(_ detail: ClassDetail) -> some View {
+    fold("Assessment Summary Record", icon: "checkmark.seal") {
+      if trainer {
+        TrainerSummaryRecordView(runID: detail.id)
+      } else {
+        LearnerSummaryRecordView(runID: detail.id, assessmentStatus: detail.assessmentStatus)
+      }
+    }
+  }
+
+  private func grading(_ detail: ClassDetail) -> some View {
+    fold("Assessment Grading", icon: "square.and.pencil") {
       NavigationLink {
         GradingView(courseID: course.id)
       } label: {
-        Label("Review and grade learners (\(detail.roster?.count ?? 0))", systemImage: "checkmark.seal")
+        VStack(alignment: .leading, spacing: 3) {
+          Label("Assessment Grading", systemImage: "square.and.pencil")
+          Text("Open Assessment Grading for Course Run \(runID) · \(detail.roster?.count ?? 0) learners")
+            .font(.caption).foregroundStyle(.secondary)
+        }
       }.accessibilityIdentifier("grading")
-    } header: {
-      Text("Learners")
     }
   }
 
-  @ViewBuilder private func surveys(_ detail: ClassDetail) -> some View {
-    Section {
-      if !trainer, let feedback = detail.feedback {
-        if let external = feedback.externalURL {
-          MaterialLink(title: "Course feedback form", icon: "star.bubble", raw: external)
-        } else if feedback.submitted {
-          Label("Course feedback sent. Thank you.", systemImage: "checkmark.circle.fill")
-            .foregroundStyle(Theme.accent)
-        } else if feedback.enabled {
-          NavigationLink {
-            CourseFeedbackView(courseID: course.id) { Task { await load() } }
-          } label: {
-            Label("Give course feedback", systemImage: "star.bubble")
-          }.accessibilityIdentifier("course-feedback")
-        }
+  private func feedbackSummary(_ detail: ClassDetail) -> some View {
+    fold("Post Course Feedback Summary", icon: "chart.bar") {
+      if let summary = detail.feedbackSummary, summary.count > 0 {
+        FeedbackSummaryView(summary: summary)
+      } else {
+        Text(
+          (detail.feedbackCount ?? 0) > 0
+            ? "\(detail.feedbackCount ?? 0) responses received." : "No feedback yet for this class."
+        ).font(.subheadline).foregroundStyle(.secondary)
       }
-      if trainer, let count = detail.feedbackCount {
-        LabeledContent("Course feedback received", value: "\(count)")
-      }
-      if let traqom = detail.traqomURL {
-        MaterialLink(title: "TRAQOM survey", icon: "list.clipboard", raw: traqom)
-        if trainer, !traqom.isEmpty {
-          Button {
-            traqomQR = true
-          } label: {
-            Label("Show TRAQOM Survey QR", systemImage: "qrcode")
-          }.accessibilityIdentifier("show-traqom-qr")
-        }
-      }
-    } header: {
-      Text("Feedback & TRAQOM")
-    } footer: {
-      Text(
-        trainer
-          ? "TRAQOM is the SkillsFuture Singapore training quality survey. Show the QR code for learners to scan, or open the link in the browser."
-          : "TRAQOM is the SkillsFuture Singapore training quality survey. It opens in the browser.")
     }
+  }
+}
+
+/// The Post Course Feedback Summary laid out for a phone: overall score, a bar per question,
+/// then the comments (three shown, the rest on "Show all").
+struct FeedbackSummaryView: View {
+  let summary: FeedbackSummary
+  @State private var allComments = false
+
+  private static func score(_ v: Double?) -> String {
+    guard let v else { return "—" }
+    return v.formatted(.number.precision(.fractionLength(v.rounded() == v ? 0 : 1)))
+  }
+  private static func tint(_ v: Double?) -> Color {
+    guard let v else { return .secondary }
+    return v >= 4 ? .green : v >= 3 ? .orange : .red
+  }
+
+  var body: some View {
+    Group {
+      HStack(alignment: .center, spacing: 16) {
+        VStack(spacing: 0) {
+          Text(Self.score(summary.overall)).font(.system(size: 40, weight: .bold, design: .rounded))
+            .foregroundStyle(Self.tint(summary.overall))
+          Text("out of 5").font(.caption).foregroundStyle(.secondary)
+        }
+        VStack(alignment: .leading, spacing: 6) {
+          HStack(spacing: 2) {
+            ForEach(1...5, id: \.self) { i in
+              let v = summary.overall ?? 0
+              Image(systemName: v >= Double(i) ? "star.fill" : v >= Double(i) - 0.5 ? "star.leadinghalf.filled" : "star")
+                .foregroundStyle(.yellow)
+            }
+          }.font(.subheadline)
+          Text("Overall average").font(.subheadline.weight(.semibold))
+          Text("\(summary.count) \(summary.count == 1 ? "response" : "responses")").font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Spacer(minLength: 0)
+      }
+      .padding(.vertical, 6)
+      .accessibilityElement(children: .combine)
+
+      ForEach(Array(summary.questions.enumerated()), id: \.offset) { i, q in
+        VStack(alignment: .leading, spacing: 8) {
+          HStack(alignment: .firstTextBaseline) {
+            Text("\(i + 1). \(q.label)").font(.subheadline).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Text("\(Self.score(q.average))/5").font(.subheadline.weight(.bold).monospacedDigit())
+          }
+          ProgressView(value: min(max(q.average ?? 0, 0), 5), total: 5).tint(Self.tint(q.average))
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+      }
+
+      if !summary.comments.isEmpty {
+        VStack(alignment: .leading, spacing: 10) {
+          Text("Comments").font(.subheadline.weight(.semibold))
+          ForEach(Array((allComments ? summary.comments : Array(summary.comments.prefix(3))).enumerated()), id: \.offset) { _, c in
+            HStack(alignment: .top, spacing: 8) {
+              Image(systemName: "quote.opening").font(.caption).foregroundStyle(Theme.accent)
+              Text(c).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
+          }
+          if summary.comments.count > 3 {
+            Button(allComments ? "Show fewer" : "Show all \(summary.comments.count) comments") {
+              withAnimation { allComments.toggle() }
+            }
+            .font(.subheadline.weight(.semibold)).buttonStyle(.borderless)
+          }
+        }
+        .padding(.vertical, 4)
+      }
+    }
+  }
+}
+
+/// A label and value that sit side by side when they fit and stack on narrow phones,
+/// so long labels such as "Digital Attendance ID" never squeeze the value.
+struct InfoRow: View {
+  let label: String
+  let value: String
+  init(_ label: String, _ value: String) {
+    self.label = label
+    self.value = value
+  }
+  var body: some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
+        Text(label).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+        Spacer(minLength: 8)
+        Text(value).multilineTextAlignment(.trailing).lineLimit(1).fixedSize()
+      }
+      VStack(alignment: .leading, spacing: 3) {
+        Text(label).font(.caption).foregroundStyle(.secondary)
+        Text(value).fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .accessibilityElement(children: .combine)
+  }
+}
+
+/// One of the three Course Duration figures (Training, Assessment, Total).
+struct HoursTile: View {
+  let label: String
+  let value: String
+  var strong = false
+  var body: some View {
+    VStack(spacing: 2) {
+      Text(value).font(.headline.monospacedDigit())
+        .foregroundStyle(strong ? Theme.accent : .primary)
+      Text(label).font(.caption).foregroundStyle(.secondary)
+    }
+    .frame(maxWidth: .infinity).padding(.vertical, 8)
+    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
+  }
+}
+
+/// One of the two SSG attendance links on MySkillsFuture. Opens in Safari so Singpass works.
+struct SSGLinkButton: View {
+  let title: String
+  let icon: String
+  let raw: String
+  @Environment(\.openURL) private var openURL
+  var body: some View {
+    Button {
+      if let url = URL(string: raw) { openURL(url) }
+    } label: {
+      VStack(spacing: 6) {
+        Image(systemName: icon).font(.title3)
+        Text(title).font(.subheadline.weight(.semibold)).multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, minHeight: 64).padding(.vertical, 6)
+    }
+    .buttonStyle(.bordered).tint(Theme.accent)
+    .accessibilityIdentifier(title)
+  }
+}
+
+/// The class venue's address; tapping opens it in Google Maps.
+struct VenueLink: View {
+  let address: String
+  @Environment(\.openURL) private var openURL
+  private var mapURL: URL? {
+    var c = URLComponents(string: "https://www.google.com/maps/search/")
+    c?.queryItems = [URLQueryItem(name: "api", value: "1"), URLQueryItem(name: "query", value: address)]
+    return c?.url
+  }
+  var body: some View {
+    Button {
+      if let mapURL { openURL(mapURL) }
+    } label: {
+      Label {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(address).foregroundStyle(.primary).multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+          Text("Open in Google Maps").font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+        }
+      } icon: {
+        Image(systemName: "mappin.and.ellipse").foregroundStyle(Theme.accent)
+      }
+      .font(.subheadline)
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("venue-map")
+  }
+}
+
+/// "Join Google Meet" / "Join Zoom" / "Join Microsoft Teams", named like the website's
+/// Virtual Class Link. Opens outside the app so the meeting app takes over.
+struct JoinMeetingButton: View {
+  let raw: String
+  let prominent: Bool
+  @Environment(\.openURL) private var openURL
+  private var url: URL? {
+    guard let url = URL(string: raw.trimmingCharacters(in: .whitespaces)), url.scheme == "https"
+    else { return nil }
+    return url
+  }
+  static func provider(_ raw: String) -> String {
+    let host = URL(string: raw)?.host?.lowercased() ?? ""
+    if host.contains("zoom.") { return "Zoom" }
+    if host.contains("teams.") || host.contains("microsoft") { return "Microsoft Teams" }
+    if host.contains("meet.google") { return "Google Meet" }
+    return "online class"
+  }
+  var body: some View {
+    let title = "Join \(Self.provider(raw))"
+    if prominent {
+      Button {
+        if let url { openURL(url) }
+      } label: {
+        Text(title).font(.headline).multilineTextAlignment(.center)
+          .frame(maxWidth: .infinity, alignment: .center).padding(.vertical, 6)
+      }
+      .buttonStyle(.borderedProminent).tint(Theme.accent).disabled(url == nil)
+      .accessibilityIdentifier("join-meeting")
+    } else {
+      Button {
+        if let url { openURL(url) }
+      } label: {
+        HStack(spacing: 12) {
+          Image(systemName: "video.fill").foregroundStyle(.green).frame(width: 26)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
+            Text(raw).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+          }
+          Spacer()
+          Image(systemName: "arrow.up.right.square").foregroundStyle(.secondary)
+        }
+      }
+      .disabled(url == nil)
+    }
+  }
+}
+
+/// A bullet point for short lists such as the Briefing on Assessment.
+struct BulletLabel: LabelStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 8) {
+      Text("•").foregroundStyle(.secondary)
+      configuration.title
+    }
+  }
+}
+
+/// A portal link with the website's two-line card text, e.g. "E-Attendance" over
+/// "Open E-Attendance for Course Run 1361797". Opens in the in-app browser.
+struct PortalLink: View {
+  let title: String
+  let subtitle: String
+  let icon: String
+  let raw: String
+  @State private var showing = false
+  private var url: URL? {
+    guard let url = URL(string: raw, relativeTo: API.shared.base)?.absoluteURL,
+      url.scheme == "https"
+    else { return nil }
+    return url
+  }
+  var body: some View {
+    Button {
+      showing = true
+    } label: {
+      HStack(spacing: 12) {
+        Image(systemName: icon).foregroundStyle(Theme.accent).frame(width: 26)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
+          if !subtitle.isEmpty {
+            Text(subtitle).font(.caption).foregroundStyle(.secondary)
+          }
+        }
+        Spacer()
+        Image(systemName: "arrow.up.right.square").foregroundStyle(.secondary)
+      }
+    }
+    .disabled(url == nil)
+    .sheet(isPresented: $showing) { if let url { Browser(url: url).ignoresSafeArea() } }
   }
 }
 

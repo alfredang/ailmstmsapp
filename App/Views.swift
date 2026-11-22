@@ -11,7 +11,8 @@ import CryptoKit
   var body: some Scene {
     WindowGroup {
       RootView().environmentObject(store).tint(Theme.accent)
-        .preferredColorScheme(store.colorScheme).task { await store.restore() }
+        .preferredColorScheme(store.user == nil ? .light : store.colorScheme)
+        .task { await store.restore() }
         // Quiz QR codes carry a universal link; the camera hands it to the app here.
         .onOpenURL { store.handle(url: $0) }
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
@@ -423,49 +424,283 @@ struct Browser: UIViewControllerRepresentable {
   }
   func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
+/// A standard month calendar: one box per day, each listing that day's confirmed classes.
+/// Past and upcoming classes both show (past ones muted); pending, unconfirmed and
+/// rescheduled classes do not. Tap a day to list its classes below the grid.
 struct CalendarView: View {
   @EnvironmentObject var store: Store
-  var calendar: Calendar {
+  @Environment(\.horizontalSizeClass) private var sizeClass
+  @State private var month = Date()
+
+  private static let zone = TimeZone(identifier: "Asia/Singapore")!
+  private var calendar: Calendar {
     var c = Calendar(identifier: .gregorian)
-    c.timeZone = TimeZone(identifier: "Asia/Singapore")!
+    c.timeZone = Self.zone
+    c.locale = Locale(identifier: "en_SG")
     return c
   }
-  var daily: [ClassSession] {
-    store.dashboard.sessions.filter {
-      if let d = $0.start { return calendar.isDate(d, inSameDayAs: store.selectedDate) }
-      return false
+  private var wide: Bool { sizeClass == .regular }
+
+  /// Confirmed sessions by day (midnight SGT). A run without published sessions covers
+  /// every day from its start to its end date.
+  private func index() -> [Date: [ClassSession]] {
+    var out: [Date: [ClassSession]] = [:]
+    for s in store.confirmedSessions {
+      guard let first = Fmt.day(s.startDate) else { continue }
+      let last = Fmt.day(s.endDate) ?? first
+      var day = calendar.startOfDay(for: first)
+      var guardCount = 0
+      while day <= last && guardCount < 62 {
+        out[day, default: []].append(s)
+        day = calendar.date(byAdding: .day, value: 1, to: day)!
+        guardCount += 1
+      }
+    }
+    for key in out.keys {
+      out[key]?.sort { ($0.startTime ?? "99") < ($1.startTime ?? "99") }
+    }
+    return out
+  }
+
+  private var monthStart: Date {
+    calendar.date(from: calendar.dateComponents([.year, .month], from: month))!
+  }
+  /// The grid's days: leading blanks (nil) up to the first weekday, then each day.
+  private var gridDays: [Date?] {
+    let first = monthStart
+    let lead = (calendar.component(.weekday, from: first) - calendar.firstWeekday + 7) % 7
+    let count = calendar.range(of: .day, in: .month, for: first)!.count
+    var days: [Date?] = Array(repeating: nil, count: lead)
+    for i in 0..<count { days.append(calendar.date(byAdding: .day, value: i, to: first)) }
+    while days.count % 7 != 0 { days.append(nil) }
+    return days
+  }
+  private var monthTitle: String {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_SG")
+    f.timeZone = Self.zone
+    f.dateFormat = "MMMM yyyy"
+    return f.string(from: monthStart)
+  }
+  private func monthClassCount(_ byDay: [Date: [ClassSession]]) -> Int {
+    let ids = byDay.filter { calendar.isDate($0.key, equalTo: monthStart, toGranularity: .month) }
+      .flatMap { $0.value.map(\.courseID) }
+    return Set(ids).count
+  }
+  private var selectedDay: Date { calendar.startOfDay(for: store.selectedDate) }
+
+  var body: some View {
+    let byDay = index()
+    return TabPage(title: "Calendar") {
+      VStack(spacing: 0) {
+        header.padding(.horizontal, 14).padding(.vertical, 12)
+        weekdayRow
+        grid(byDay)
+      }
+      .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+      .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.cardBorder))
+      .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+      .gesture(
+        DragGesture(minimumDistance: 30).onEnded { value in
+          guard abs(value.translation.width) > abs(value.translation.height) else { return }
+          shift(value.translation.width < 0 ? 1 : -1)
+        })
+
+      HStack(spacing: 14) {
+        legend(color: Theme.brand, text: "Upcoming")
+        legend(color: Color(.systemGray3), text: "Past")
+        Spacer()
+        let count = monthClassCount(byDay)
+        Text("\(count) confirmed class\(count == 1 ? "" : "es")")
+      }
+      .font(.caption).foregroundStyle(.secondary)
+
+      dayList(byDay[selectedDay] ?? [])
+    }
+    .refreshable { await store.refresh() }
+    .onAppear { month = store.selectedDate }
+    .onChange(of: store.selectedDate) { _, date in
+      if !calendar.isDate(date, equalTo: month, toGranularity: .month) { month = date }
     }
   }
-  var body: some View {
-    List {
-      Section {
-        DatePicker("Class date", selection: $store.selectedDate, displayedComponents: .date)
-          .datePickerStyle(.graphical).environment(
-            \.timeZone, TimeZone(identifier: "Asia/Singapore")!)
+
+  private var header: some View {
+    HStack(spacing: 6) {
+      Text(monthTitle).font(.title3.bold())
+      Spacer()
+      Button("Today") {
+        store.selectedDate = Date()
+        month = Date()
       }
-      Section("Classes · Singapore time") {
-        if daily.isEmpty {
-          ContentUnavailableView(
-            "No classes on this day", systemImage: "calendar",
-            description: Text("Select another date or jump to your next class."))
-          if let next = store.upcoming.first?.start {
-            Button("Jump to next class") { store.selectedDate = next }
+      .font(.subheadline.weight(.semibold)).buttonStyle(.bordered).controlSize(.small)
+      Button { shift(-1) } label: {
+        Image(systemName: "chevron.left").frame(width: 34, height: 34)
+      }.accessibilityLabel("Previous month")
+      Button { shift(1) } label: {
+        Image(systemName: "chevron.right").frame(width: 34, height: 34)
+      }.accessibilityLabel("Next month")
+    }
+    .font(.body.weight(.semibold))
+  }
+
+  private var weekdayRow: some View {
+    let symbols = calendar.shortWeekdaySymbols
+    let ordered = Array(symbols[(calendar.firstWeekday - 1)...] + symbols[..<(calendar.firstWeekday - 1)])
+    return HStack(spacing: 0) {
+      ForEach(ordered, id: \.self) { name in
+        Text(name.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity).padding(.vertical, 6)
+      }
+    }
+    .background(Theme.page)
+    .overlay(alignment: .bottom) { Rectangle().fill(Theme.cardBorder).frame(height: 1) }
+  }
+
+  private func grid(_ byDay: [Date: [ClassSession]]) -> some View {
+    let days = gridDays
+    return VStack(spacing: 0) {
+      ForEach(0..<(days.count / 7), id: \.self) { row in
+        HStack(spacing: 0) {
+          ForEach(0..<7, id: \.self) { col in
+            cell(days[row * 7 + col], byDay)
+              .overlay(alignment: .trailing) {
+                if col < 6 { Rectangle().fill(Theme.cardBorder).frame(width: 1) }
+              }
           }
         }
-        ForEach(daily) { s in
-          NavigationLink {
-            SessionDetail(session: s)
-          } label: {
-            VStack(alignment: .leading, spacing: 6) {
-              Text(s.title).font(.headline)
-              Text("\(s.timeLabel)–\(s.endTimeLabel) · \(s.subtitle)").font(
-                .subheadline
-              ).foregroundStyle(.secondary)
+        .overlay(alignment: .bottom) {
+          if row < days.count / 7 - 1 { Rectangle().fill(Theme.cardBorder).frame(height: 1) }
+        }
+      }
+    }
+  }
+
+  @ViewBuilder private func cell(_ day: Date?, _ byDay: [Date: [ClassSession]]) -> some View {
+    let height: CGFloat = wide ? 104 : 72
+    if let day {
+      let classes = byDay[day] ?? []
+      let isToday = calendar.isDateInToday(day)
+      let isSelected = calendar.isDate(day, inSameDayAs: selectedDay)
+      let past = day < calendar.startOfDay(for: Date())
+      let limit = wide ? 3 : 2
+      Button {
+        store.selectedDate = day
+      } label: {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("\(calendar.component(.day, from: day))")
+            .font(.footnote.weight(isToday || isSelected ? .bold : .regular))
+            .foregroundStyle(isSelected ? Color.white : isToday ? Theme.accent : .primary)
+            .frame(width: 24, height: 24)
+            .background {
+              if isSelected { Circle().fill(Theme.brand) } else if isToday {
+                Circle().fill(Theme.accentSoft)
+              }
             }
+          ForEach(classes.prefix(limit)) { s in
+            Text(s.title)
+              .font(.system(size: wide ? 11 : 9, weight: .semibold))
+              .lineLimit(1)
+              .padding(.horizontal, 3).padding(.vertical, 1)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .foregroundStyle(past ? Color.primary.opacity(0.7) : Color.white)
+              .background(
+                past ? Color(.systemGray4) : Theme.brand,
+                in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+          }
+          if classes.count > limit {
+            Text("+\(classes.count - limit) more").font(.system(size: 9, weight: .medium))
+              .foregroundStyle(.secondary)
+          }
+          Spacer(minLength: 0)
+        }
+        .padding(3)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .topLeading)
+        .background(Rectangle().fill(isSelected ? Theme.accentSoft : Color.clear))
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(accessibilityLabel(day, classes.count))
+      .accessibilityAddTraits(isSelected ? .isSelected : [])
+    } else {
+      Color(.systemGray6).opacity(0.5)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+    }
+  }
+
+  @ViewBuilder private func dayList(_ daily: [ClassSession]) -> some View {
+    Text("\(Fmt.longDate(Self.key(selectedDay))) · Singapore time")
+      .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 4)
+    if daily.isEmpty {
+      InfoCard {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("No confirmed classes on this day").font(.headline)
+          Text("Pick another day, or swipe the calendar to change month.")
+            .font(.subheadline).foregroundStyle(.secondary)
+          if let next = store.upcoming.first(where: { s in
+            store.dashboard.courses.contains { $0.id == s.courseID && $0.isConfirmed }
+          })?.start {
+            Button("Jump to next class") { store.selectedDate = next }.buttonStyle(.bordered)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+    ForEach(daily) { s in
+      NavigationLink {
+        SessionDetail(session: s)
+      } label: {
+        InfoCard {
+          HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 2).fill(
+              (s.end ?? s.start ?? .distantPast) < Date() ? Color(.systemGray3) : Theme.brand
+            ).frame(width: 4)
+            VStack(alignment: .leading, spacing: 4) {
+              Text(s.title).font(.headline).foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+              Text(
+                s.startTime == nil
+                  ? s.subtitle : "\(s.timeLabel)–\(s.endTimeLabel) · \(s.subtitle)"
+              )
+              .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.footnote.weight(.semibold))
+              .foregroundStyle(.tertiary)
           }
         }
       }
-    }.navigationTitle("Calendar").refreshable { await store.refresh() }
+      .buttonStyle(.plain)
+    }
+  }
+
+  private func legend(color: Color, text: String) -> some View {
+    HStack(spacing: 5) {
+      RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 12, height: 8)
+      Text(text)
+    }
+  }
+
+  private func shift(_ months: Int) {
+    if let next = calendar.date(byAdding: .month, value: months, to: monthStart) {
+      withAnimation(.easeInOut(duration: 0.2)) { month = next }
+    }
+  }
+
+  private func accessibilityLabel(_ day: Date, _ count: Int) -> String {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_SG")
+    f.timeZone = Self.zone
+    f.dateFormat = "EEEE d MMMM"
+    let classes = count == 0 ? "no classes" : "\(count) class\(count == 1 ? "" : "es")"
+    return "\(f.string(from: day)), \(classes)"
+  }
+
+  private static func key(_ day: Date) -> String {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = zone
+    f.dateFormat = "yyyy-MM-dd"
+    return f.string(from: day)
   }
 }
 struct SessionDetail: View {

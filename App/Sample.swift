@@ -16,7 +16,8 @@ enum Sample {
         slidesURL: "https://lms-tms.tertiaryinfotech.com/mobile/sample-slides.html",
         guideURL: "https://lms-tms.tertiaryinfotech.com/mobile/sample-guide.html",
         activitiesURL: "https://lms-tms.tertiaryinfotech.com/mobile/sample-activity.html",
-        trainerSlidesURL: "https://lms-tms.tertiaryinfotech.com/mobile/sample-trainer.html"),
+        trainerSlidesURL: "https://lms-tms.tertiaryinfotech.com/mobile/sample-trainer.html",
+        classStatus: "Confirmed"),
       Course(
         id: "sample-data", title: "Fundamentals of AI Ethics and Responsible AI",
         code: "TGS-2023021102 · SAMPLE",
@@ -25,7 +26,7 @@ enum Sample {
         slidesURL: "https://lms-tms.tertiaryinfotech.com/mobile/sample-slides.html",
         guideURL: "https://lms-tms.tertiaryinfotech.com/mobile/sample-guide.html",
         activitiesURL: "https://lms-tms.tertiaryinfotech.com/mobile/sample-activity.html",
-        trainerSlidesURL: nil),
+        trainerSlidesURL: nil, classStatus: "Confirmed"),
     ]
     let sessions = [
       ClassSession(
@@ -76,22 +77,41 @@ enum Sample {
     ]
   }
 
+  /// Sample taught classes for the trainer demo: two months of made-up hours.
+  static func hours() -> [TaughtClass] {
+    let date = DateFormatter()
+    date.dateFormat = "yyyy-MM-dd"
+    date.timeZone = TimeZone(identifier: "Asia/Singapore")
+    func day(_ back: Double) -> String { date.string(from: Date().addingTimeInterval(-back * 86400)) }
+    return [
+      TaughtClass(
+        id: "h1", title: "Responsible Generative AI Basics (sample)", code: "TGS-2025060472",
+        runCode: nil, startDate: day(10), endDate: day(9), trainingHours: 14, assessmentHours: 2),
+      TaughtClass(
+        id: "h2", title: "Fundamentals of AI Ethics and Responsible AI (sample)",
+        code: "TGS-2023021102", runCode: nil, startDate: day(40), endDate: day(40),
+        trainingHours: 7, assessmentHours: 1),
+    ]
+  }
+
   static func detail(id: String, role: String, dashboard: Dashboard) -> ClassDetail {
     let course = dashboard.courses.first { $0.id == id }
     let trainer = role == "trainer"
     let page = "https://lms-tms.tertiaryinfotech.com/mobile/"
-    var materials = [
-      ClassMaterial(id: "slides", title: "Learner slides", url: page + "sample-slides.html"),
-      ClassMaterial(id: "guide", title: "Learner Guide", url: page + "sample-guide.html"),
-      ClassMaterial(id: "activities", title: "Labs & activities", url: page + "sample-activity.html"),
-    ]
-    if trainer {
-      materials.insert(
-        ClassMaterial(id: "trainer-slides", title: "Trainer slides", url: page + "sample-trainer.html"),
-        at: 0)
-      materials.append(
-        ClassMaterial(id: "lesson-plan", title: "Lesson Plan", url: page + "sample-guide.html"))
-    }
+    let materials =
+      trainer
+      ? [
+        ClassMaterial(id: "courseware-link", title: "Courseware Link", url: page + "support.html"),
+        ClassMaterial(id: "lesson-plan", title: "Lesson Plan", url: page + "sample-guide.html"),
+        ClassMaterial(id: "guide", title: "Learner Guide", url: page + "sample-guide.html"),
+        ClassMaterial(id: "trainer-slides", title: "Trainer Slides", url: page + "sample-trainer.html"),
+        ClassMaterial(id: "activities", title: "Activities/Lab", url: page + "sample-activity.html"),
+      ]
+      : [
+        ClassMaterial(id: "guide", title: "Learner Guide", url: page + "sample-guide.html"),
+        ClassMaterial(id: "slides", title: "Learner Slides", url: page + "sample-slides.html"),
+        ClassMaterial(id: "activities", title: "Activities/Lab", url: page + "sample-activity.html"),
+      ]
     let sessions = dashboard.sessions.filter { $0.courseID == id }.enumerated().map { index, s in
       DetailSession(
         id: s.id, label: "Day \(index + 1) · \(s.dateLabel)", date: s.startDate,
@@ -121,7 +141,35 @@ enum Sample {
           RosterLearner(enrolmentId: "sample-2", name: "Priya Nair (sample)", status: "Competent", traqomCompleted: true, submissions: 2),
           RosterLearner(enrolmentId: "sample-3", name: "Wei Ming (sample)", status: nil, traqomCompleted: false, submissions: 0),
         ] : nil,
-      feedbackCount: trainer ? 2 : nil)
+      feedbackCount: trainer ? 2 : nil,
+      feedbackSummary: trainer
+        ? FeedbackSummary(
+          count: 2, overall: 4.5,
+          questions: [
+            .init(label: "Overall, how would you rate the course meeting the learning objectives?", average: 4.5),
+            .init(label: "Overall, how would you rate trainer knowledgeable in this subject matter?", average: 5),
+            .init(label: "Overall, how would you rate the training environment?", average: 4),
+          ],
+          comments: ["Very practical, loved the hands-on labs. (sample)"]) : nil,
+      courseDetails: CourseDetails(
+        tscTitle: "Artificial Intelligence Application", tscCode: "EGS-TEM-3026-1.1",
+        fundingValidityStart: "2025-01-30", fundingValidityEnd: "2027-01-29",
+        trainingHours: 7, assessmentHours: 1),
+      trainerNames: ["Alex Tan (sample)"],
+      digitalAttendanceId: "RA000000",
+      announcements: [
+        Announcement(
+          id: "sample-1", title: "Welcome to class",
+          message: "Bring your laptop with the lab software installed.", postedBy: "Alex Tan",
+          createdAt: course?.startDate)
+      ],
+      briefingOnAssessment: [
+        "Place phones & other materials under the table or on the floor",
+        "No discussion during assessment",
+      ],
+      showCourseFeedback: true,
+      courseFeedbackURL: trainer ? "/feedback/" + id : nil,
+      swdaEnrolmentURL: trainer ? "/enrol/" + id : nil)
   }
 
   static func sheet(sessionID: String) -> AttendanceSheet {

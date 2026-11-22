@@ -15,12 +15,20 @@ struct MainView: View {
       }
       TabView(selection: $store.selectedTab) {
         NavigationStack { ClassesView() }
-          .tabItem { Label("My Classes", systemImage: "graduationcap.fill") }.tag(0)
-        NavigationStack { CalendarView() }
+          .tabItem {
+            Label(store.isStaffView ? "Home" : "My Classes", systemImage: store.isStaffView ? "house.fill" : "graduationcap.fill")
+          }.tag(0)
+        NavigationStack {
+          if store.role == "admin" { AdminCalendarView() } else { CalendarView() }
+        }
           .tabItem { Label("Calendar", systemImage: "calendar") }.tag(Store.calendarTab)
         // A trainer sees what they are paid and the hours they have taught;
-        // a learner sees certificates and billing. A later role adds its own pair here.
-        if store.role == "trainer" {
+        // a learner sees certificates and billing; Developer and Admin see their own page.
+        if store.isStaffView {
+          NavigationStack { StaffView(role: store.role) }
+            .tabItem { Label(StaffView.label(store.role), systemImage: StaffView.icon(store.role)) }
+            .tag(2)
+        } else if store.role == "trainer" {
           NavigationStack { PayoutView() }
             .tabItem { Label("Payout", systemImage: "banknote.fill") }.tag(2)
           NavigationStack { TrainingHoursView() }
@@ -187,29 +195,52 @@ struct HomeHeader: View {
       .accessibilityIdentifier("my-profile")
 
       if store.canSwitchRole {
-        Menu {
-          Picker(
-            "View as",
-            selection: Binding(
-              get: { store.role }, set: { role in Task { await store.setViewRole(role) } })
-          ) {
-            ForEach(store.availableRoles, id: \.self) { Text(Store.roleName($0)).tag($0) }
-          }
-        } label: {
-          HStack(spacing: 12) {
-            Image(systemName: "eye.fill").foregroundStyle(Theme.accent)
-            Text("View as").foregroundStyle(.secondary)
-            Spacer()
-            Text(Store.roleName(store.role)).fontWeight(.semibold).foregroundStyle(.primary)
-            Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.semibold))
-              .foregroundStyle(.secondary)
-          }
-          .font(.body).padding(.horizontal, 18).padding(.vertical, 14)
-          .background(Theme.card, in: card).overlay(card.stroke(Theme.cardBorder))
-        }
-        .accessibilityIdentifier("view-as")
+        ViewAsMenu(boxed: true)
       }
     }
+  }
+}
+
+extension View {
+  /// The course search field, left out where there are no courses (Developer and Admin).
+  @ViewBuilder func courseSearch(text: Binding<String>, shown: Bool) -> some View {
+    if shown { searchable(text: text, prompt: "Find your course") } else { self }
+  }
+}
+
+/// The owner's "View as" switcher: Learner, Trainer, Developer or Admin. Shown on My Classes
+/// and on the Account page. It changes what this device shows, never what the server allows.
+struct ViewAsMenu: View {
+  /// True on My Classes, where the row is its own card; false inside an Account list row.
+  var boxed = false
+  @EnvironmentObject var store: Store
+  private var card: RoundedRectangle { RoundedRectangle(cornerRadius: 18) }
+  var body: some View {
+    Menu {
+      Picker(
+        "View as",
+        selection: Binding(
+          get: { store.role }, set: { role in Task { await store.setViewRole(role) } })
+      ) {
+        ForEach(store.availableRoles, id: \.self) { Text(Store.roleName($0)).tag($0) }
+      }
+    } label: {
+      HStack(spacing: 12) {
+        Image(systemName: "eye.fill").foregroundStyle(Theme.accent)
+        Text("View as").foregroundStyle(.secondary)
+        Spacer()
+        Text(Store.roleName(store.role)).fontWeight(.semibold).foregroundStyle(.primary)
+        Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.semibold))
+          .foregroundStyle(.secondary)
+      }
+      .font(.body)
+      .padding(.horizontal, boxed ? 18 : 0).padding(.vertical, boxed ? 14 : 0)
+      .background(boxed ? Theme.card : Color.clear, in: card)
+      .overlay(card.stroke(boxed ? Theme.cardBorder : Color.clear))
+      .contentShape(Rectangle())
+    }
+    .accessibilityLabel("View as \(Store.roleName(store.role))")
+    .accessibilityIdentifier("view-as")
   }
 }
 
@@ -254,7 +285,23 @@ struct ClassesView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         HomeHeader()
+        if store.isStaffView {
+          StaffHome(role: store.role)
+        } else {
+          classList
+        }
+      }
+      .padding(20).frame(maxWidth: 760).frame(maxWidth: .infinity)
+    }
+    .background(Theme.page).navigationTitle(store.isStaffView ? "Home" : "My Classes")
+    .navigationBarTitleDisplayMode(.inline)
+    .brandToolbar()
+    .courseSearch(text: $query, shown: !store.isStaffView)
+    .refreshable { await store.refresh() }
+  }
 
+  /// The learner and trainer home: this role's classes, the next sessions and the kit.
+  @ViewBuilder private var classList: some View {
         Picker("Classes", selection: Binding(get: { shown }, set: { picked = $0 })) {
           ForEach(Bucket.allCases) { b in Text("\(b.rawValue) (\(courses(b).count))").tag(b) }
         }
@@ -312,13 +359,6 @@ struct ClassesView: View {
         }
         Text("Class times are shown in Singapore time (SGT).").font(.footnote)
           .foregroundStyle(.secondary)
-      }
-      .padding(20).frame(maxWidth: 760).frame(maxWidth: .infinity)
-    }
-    .background(Theme.page).navigationTitle("My Classes").navigationBarTitleDisplayMode(.inline)
-    .brandToolbar()
-    .searchable(text: $query, prompt: "Find your course")
-    .refreshable { await store.refresh() }
   }
 
   private var emptyTitle: String {
@@ -387,7 +427,6 @@ struct ClassCard: View {
         }
       }
       .font(.footnote).foregroundStyle(.secondary)
-      JourneyProgress(course: course)
     }
     .padding(16)
     .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -486,11 +525,11 @@ struct PayoutCard: View {
 
 // MARK: - Tabs that arrive in a later phase
 //
-// Hours, Certificates and Billing have no secure endpoint yet, so each shows what it will
+// Certificates and Billing have no secure endpoint yet, so each shows what it will
 // hold. To finish one, give it the PayoutView shape: a `Store.load…()` call, then swap
 // `ComingSoon` for the loaded cards with the same empty and error states. Do not point them
 // at /api/learner/certificates, /api/billing/history or /api/courses/trainer-hours: those
-// routes trust a user id in the query and are not for the app.
+// routes trust a user id in the query and are not for the app (hours use /api/mobile/hours).
 
 struct ComingSoon: View {
   let icon: String
@@ -506,12 +545,162 @@ struct ComingSoon: View {
   }
 }
 
+/// The Developer and Admin home card under the Welcome back header.
+/// The trainer's taught hours from the TMS (GET /api/mobile/hours): all time with a
+/// month-by-month breakdown, or one month's classes. Confirmed classes that have ended only.
 struct TrainingHoursView: View {
+  @EnvironmentObject var store: Store
+  @State private var classes: [TaughtClass]?
+  @State private var problem: String?
+  @State private var mode = Mode.all
+  @State private var month: String?
+
+  private enum Mode: String, CaseIterable, Identifiable {
+    case all = "All time"
+    case month = "By month"
+    var id: String { rawValue }
+  }
+
   var body: some View {
     TabPage(title: "Training Hours") {
-      ComingSoon(
-        icon: "clock", title: "Coming soon",
-        text: "The hours you have taught, by month and by class, will appear here.")
+      if let classes {
+        if classes.isEmpty {
+          ContentUnavailableView {
+            Label("No training hours yet", systemImage: "clock")
+          } description: {
+            Text("Hours appear here once a confirmed class you teach has ended.")
+          }
+          .padding(.top, 40)
+        } else {
+          Picker("Period", selection: $mode) {
+            ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+          }
+          .pickerStyle(.segmented).accessibilityIdentifier("hours-period")
+          if mode == .all { allTime(classes) } else { byMonth(classes) }
+          Text("Confirmed classes that have ended. Hours are each course's training and assessment hours, as on the TMS website.")
+            .font(.footnote).foregroundStyle(.secondary)
+        }
+      } else if let problem {
+        ErrorCard(message: problem) { Task { await load() } }
+      } else {
+        ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
+      }
+    }
+    .refreshable { await load() }
+    .task { if classes == nil { await load() } }
+  }
+
+  /// Month keys ("2026-11"), newest first.
+  private func months(_ classes: [TaughtClass]) -> [String] {
+    Array(Set(classes.map(\.monthKey))).sorted(by: >)
+  }
+
+  @ViewBuilder private func allTime(_ classes: [TaughtClass]) -> some View {
+    summary("All time", classes)
+    Text("By month").font(.headline).padding(.top, 4)
+    InfoCard {
+      VStack(spacing: 0) {
+        let keys = months(classes)
+        ForEach(keys, id: \.self) { key in
+          let items = classes.filter { $0.monthKey == key }
+          Button {
+            month = key
+            mode = .month
+          } label: {
+            HStack {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(Fmt.month(key)).font(.body.weight(.semibold)).foregroundStyle(.primary)
+                Text("\(items.count) class\(items.count == 1 ? "" : "es")").font(.footnote)
+                  .foregroundStyle(.secondary)
+              }
+              Spacer()
+              Text(Fmt.hours(items.reduce(0) { $0 + $1.totalHours })).font(.body.weight(.semibold))
+                .foregroundStyle(Theme.accent).monospacedDigit()
+              Image(systemName: "chevron.right").font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 10).contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          if key != keys.last { Divider() }
+        }
+      }
+    }
+  }
+
+  @ViewBuilder private func byMonth(_ classes: [TaughtClass]) -> some View {
+    let keys = months(classes)
+    let current = month.flatMap { keys.contains($0) ? $0 : nil } ?? keys.first!
+    let index = keys.firstIndex(of: current) ?? 0
+    HStack {
+      Button { month = keys[index + 1] } label: {
+        Image(systemName: "chevron.left").frame(width: 36, height: 36)
+      }
+      .disabled(index + 1 >= keys.count).accessibilityLabel("Earlier month")
+      Spacer()
+      Menu {
+        Picker("Month", selection: Binding(get: { current }, set: { month = $0 })) {
+          ForEach(keys, id: \.self) { Text(Fmt.month($0)).tag($0) }
+        }
+      } label: {
+        HStack(spacing: 6) {
+          Text(Fmt.month(current)).font(.headline)
+          Image(systemName: "chevron.up.chevron.down").font(.caption.weight(.semibold))
+        }
+      }
+      Spacer()
+      Button { month = keys[index - 1] } label: {
+        Image(systemName: "chevron.right").frame(width: 36, height: 36)
+      }
+      .disabled(index == 0).accessibilityLabel("Later month")
+    }
+    .font(.body.weight(.semibold))
+    let items = classes.filter { $0.monthKey == current }
+    summary(Fmt.month(current), items)
+    ForEach(items) { TaughtClassCard(item: $0) }
+  }
+
+  private func summary(_ title: String, _ items: [TaughtClass]) -> some View {
+    let training = items.reduce(0) { $0 + $1.trainingHours }
+    let assessment = items.reduce(0) { $0 + $1.assessmentHours }
+    return SummaryCard(
+      title: "\(title) · total hours", value: Fmt.hours(training + assessment),
+      caption:
+        "\(items.count) class\(items.count == 1 ? "" : "es") · \(Fmt.hours(training)) training · \(Fmt.hours(assessment)) assessment"
+    )
+  }
+
+  private func load() async {
+    do {
+      classes = try await store.loadHours()
+      problem = nil
+    } catch {
+      if classes == nil { problem = error.localizedDescription }
+    }
+  }
+}
+
+struct TaughtClassCard: View {
+  let item: TaughtClass
+  var body: some View {
+    InfoCard {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .top) {
+          Text(item.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+          Spacer(minLength: 12)
+          Text(Fmt.hours(item.totalHours)).font(.headline).foregroundStyle(Theme.accent)
+            .monospacedDigit()
+        }
+        Group {
+          LabeledContent("Class", value: Fmt.range(item.startDate, item.endDate))
+          LabeledContent(
+            "Hours",
+            value: "\(Fmt.hours(item.trainingHours)) training · \(Fmt.hours(item.assessmentHours)) assessment")
+          if let code = item.code, !code.isEmpty { LabeledContent("Course", value: code) }
+          if let run = item.runCode, !run.isEmpty { LabeledContent("Run", value: run) }
+        }
+        .font(.footnote).foregroundStyle(.secondary)
+      }
     }
   }
 }
@@ -658,6 +847,13 @@ struct AccountView: View {
         }
         .frame(maxWidth: .infinity).padding(.vertical, 8).listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets())
+      }
+      if store.canSwitchRole {
+        Section {
+          ViewAsMenu()
+        } footer: {
+          Text("Owner account only: see the app as each role. The server still checks every request.")
+        }
       }
 
       Section("Contact") {

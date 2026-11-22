@@ -9,6 +9,31 @@ final class ModelTests: XCTestCase {
     XCTAssertEqual(a, b)
     XCTAssertEqual(a?.timeIntervalSince1970, 1_789_002_000)
   }
+  @MainActor func testCalendarKeepsConfirmedClassesOnly() throws {
+    let json = Data(
+      #"""
+      {"courses":[
+        {"id":"a","title":"Confirmed class","classStatus":"Confirmed"},
+        {"id":"b","title":"Pending class","classStatus":"Pending"},
+        {"id":"c","title":"No status"}],
+       "sessions":[
+        {"id":"s1","courseID":"a","title":"Confirmed class","startDate":"2026-11-21","subtitle":"S1"},
+        {"id":"s2","courseID":"b","title":"Pending class","startDate":"2026-11-22","subtitle":"S1"},
+        {"id":"s3","courseID":"c","title":"No status","startDate":"2026-11-23","subtitle":"S1"}]}
+      """#.utf8)
+    let store = Store()
+    store.dashboard = try JSONDecoder().decode(Dashboard.self, from: json)
+    XCTAssertEqual(store.confirmedSessions.map(\.id), ["s1"])
+  }
+  func testTaughtHoursDecodeAndGroupByMonth() throws {
+    let json = Data(
+      #"{"data":[{"id":"1","title":"A","code":null,"runCode":"R1","startDate":"2026-11-20","endDate":"2026-11-21","trainingHours":14,"assessmentHours":2.5}]}"#
+        .utf8)
+    let item = try JSONDecoder().decode(HoursReply.self, from: json).data[0]
+    XCTAssertEqual(item.totalHours, 16.5)
+    XCTAssertEqual(item.monthKey, "2026-11")
+    XCTAssertEqual(Fmt.month("2026-11"), "November 2026")
+  }
   func testInvalidDate() {
     XCTAssertNil(ClassSession.date(nil, "09:00"))
     XCTAssertNil(ClassSession.date("garbage", "09:00"))
@@ -21,8 +46,9 @@ final class ModelTests: XCTestCase {
   }
   func testRoleSpecificAcademyMaterials() {
     let course = Sample.data(role: "learner").courses[0]
-    XCTAssertEqual(course.materials(for: "learner").map(\.id), ["slides", "guide", "activities"])
-    XCTAssertEqual(course.materials(for: "trainer").first?.id, "trainer-slides")
+    // Website Courseware order: learners see the guide, then their slides, then the labs.
+    XCTAssertEqual(course.materials(for: "learner").map(\.id), ["guide", "slides", "activities"])
+    XCTAssertEqual(course.materials(for: "trainer").map(\.id), ["guide", "trainer-slides", "activities"])
     XCTAssertTrue(course.materials(for: "trainer").allSatisfy(\.isPublished))
   }
   func testCoursewareLinksBecomePDFDownloads() {
@@ -64,7 +90,9 @@ final class ModelTests: XCTestCase {
     XCTAssertTrue(learner.assessments.allSatisfy(\.published))
     let trainer = Sample.detail(id: "sample-ai", role: "trainer", dashboard: Sample.data(role: "trainer"))
     XCTAssertEqual(trainer.roster?.count, 3)
-    XCTAssertEqual(trainer.materials.first?.id, "trainer-slides")
+    XCTAssertEqual(trainer.materials.first?.id, "courseware-link")
+    XCTAssertTrue(trainer.materials.contains { $0.id == "trainer-slides" })
+    XCTAssertFalse(trainer.materials.contains { $0.id == "slides" })
     XCTAssertNotNil(Sample.pdf(title: "Learner Guide"))
   }
   /// Responses recorded from the backend's /api/mobile routes; the app must decode them as-is.
@@ -179,6 +207,25 @@ final class ModelTests: XCTestCase {
     let fallback = partial.review(for: reply.quiz, answers: ["q-1": 0, "2": 1])
     XCTAssertEqual(fallback.map(\.correct), [true, true, false])
     XCTAssertEqual(fallback.map(\.selectedIndex), [0, 1, nil])
+  }
+
+  /// Four roles in switcher order; Developer and Admin are back-office views with no class
+  /// data, and a sample (demo) session never offers the owner's role switch.
+  @MainActor func testRoleNamesAndStaffViews() async {
+    XCTAssertEqual(Store.knownRoles, ["learner", "trainer", "developer", "admin"])
+    XCTAssertEqual(
+      Store.knownRoles.map(Store.roleName), ["Learner", "Trainer", "Developer", "Admin"])
+    let store = Store()
+    store.openDemo("admin")
+    XCTAssertTrue(store.isStaffView)
+    XCTAssertTrue(store.dashboard.courses.isEmpty)
+    XCTAssertFalse(store.canSwitchRole)
+    await store.refresh()
+    XCTAssertTrue(store.dashboard.sessions.isEmpty)
+    store.openDemo("trainer")
+    XCTAssertFalse(store.isStaffView)
+    XCTAssertFalse(store.dashboard.courses.isEmpty)
+    store.clear()
   }
 
   @MainActor func testQuizLinkWaitsForSignInAndSampleQuizScores() async throws {
