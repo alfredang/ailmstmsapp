@@ -2,6 +2,8 @@ import EventKit
 import EventKitUI
 import SafariServices
 import SwiftUI
+import AuthenticationServices
+import CryptoKit
 
 @main struct LearningApp: App {
   @UIApplicationDelegateAdaptor(Push.self) var delegate
@@ -104,12 +106,14 @@ struct LoginView: View {
   @State var resendAt = Date.distantPast
   @State var usePassword = false
   @State var password = ""
+  @State private var google = GoogleAdminSignIn()
+  @State private var googleBusy = false
   @FocusState private var focus: Field?
   private enum Field { case email, password, code }
 
   private var trimmedEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
   private var emailValid: Bool { trimmedEmail.contains("@") && trimmedEmail.contains(".") }
-  private var busy: Bool { store.busy || sending }
+  private var busy: Bool { store.busy || sending || googleBusy }
   private var primaryDisabled: Bool {
     if busy || !emailValid { return true }
     if usePassword { return password.isEmpty }
@@ -277,6 +281,10 @@ struct LoginView: View {
               Link(
                 "Privacy policy",
                 destination: URL(string: "https://lms-tms.tertiaryinfotech.com/mobile/privacy.html")!)
+              // Deliberately quiet: staff know it is here.
+              Button("Admin sign-in") { Task { await signInAsAdmin() } }
+                .disabled(busy)
+                .accessibilityIdentifier("admin-sign-in")
             }
             .font(.footnote)
             .tint(.secondary)
@@ -324,6 +332,20 @@ struct LoginView: View {
       await store.login(email: trimmedEmail, otp: otp)
     } else {
       await send()
+    }
+  }
+
+  /// Admin sign-in: Google in the system sign-in sheet, for allow-listed admin accounts only.
+  private func signInAsAdmin() async {
+    googleBusy = true
+    defer { googleBusy = false }
+    do {
+      let result = try await google.start()
+      try await store.loginWithGoogle(code: result.code, verifier: result.verifier)
+    } catch GoogleAdminSignIn.Failure.cancelled {
+      // Closed the sheet: nothing to report.
+    } catch {
+      store.error = error.localizedDescription
     }
   }
 
@@ -566,5 +588,70 @@ struct AboutView: View {
         )
       }
     }.navigationTitle("About")
+  }
+}
+
+/// Admin sign-in with Google, through the LMS/TMS's own Google sign-in. The app sends the
+/// hash of a random verifier; the server answers at tiatms://auth with a single-use code,
+/// which only this verifier can exchange for a session.
+@MainActor
+final class GoogleAdminSignIn: NSObject, ASWebAuthenticationPresentationContextProviding {
+  enum Failure: LocalizedError {
+    case cancelled
+    case message(String)
+    var errorDescription: String? {
+      switch self {
+      case .cancelled: "Sign-in was cancelled."
+      case .message(let m): m
+      }
+    }
+  }
+
+  private var session: ASWebAuthenticationSession?
+
+  func start() async throws -> (code: String, verifier: String) {
+    var bytes = [UInt8](repeating: 0, count: 32)
+    _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+    let verifier = bytes.map { String(format: "%02x", $0) }.joined()
+    let challenge = SHA256.hash(data: Data(verifier.utf8)).map { String(format: "%02x", $0) }
+      .joined()
+    var components = URLComponents(
+      url: API.shared.base.appendingPathComponent("api/mobile/google-start"),
+      resolvingAgainstBaseURL: false)!
+    components.queryItems = [URLQueryItem(name: "challenge", value: challenge)]
+
+    let callback: URL = try await withCheckedThrowingContinuation { continuation in
+      let s = ASWebAuthenticationSession(url: components.url!, callbackURLScheme: "tiatms") {
+        url, error in
+        if let url {
+          continuation.resume(returning: url)
+        } else if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin {
+          continuation.resume(throwing: Failure.cancelled)
+        } else {
+          continuation.resume(
+            throwing: Failure.message("Google sign-in could not start. Please try again."))
+        }
+      }
+      s.presentationContextProvider = self
+      session = s
+      if !s.start() {
+        continuation.resume(
+          throwing: Failure.message("Google sign-in could not start. Please try again."))
+      }
+    }
+    session = nil
+    let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    if let message = items.first(where: { $0.name == "error" })?.value {
+      throw Failure.message(message)
+    }
+    guard let code = items.first(where: { $0.name == "code" })?.value, !code.isEmpty else {
+      throw Failure.message("Google sign-in did not complete. Please try again.")
+    }
+    return (code, verifier)
+  }
+
+  func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+    UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+      ?? ASPresentationAnchor()
   }
 }

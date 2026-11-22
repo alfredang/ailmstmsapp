@@ -125,6 +125,27 @@ import UserNotifications
       await updateNotificationStatus()
     } catch { self.error = error.localizedDescription }
   }
+  /// Admin sign-in with Google (allow-listed accounts only): trades the single-use code
+  /// from the Google callback, plus this device's verifier, for a session.
+  func loginWithGoogle(code: String, verifier: String) async throws {
+    let reply: LoginReply = try await API.shared.request(
+      "mobile/google-exchange", method: "POST", body: ["code": code, "verifier": verifier])
+    guard
+      let allowed = resolveRole(for: reply.data.user, chosen: loginChoice, announce: true)
+    else {
+      throw APIError(
+        message: "This app is for learners and trainers. Your account has neither role.")
+    }
+    UserDefaults.standard.set(loginChoice, forKey: "loginRole")
+    try Keychain.save(reply.data.token)
+    user = reply.data.user
+    role = allowed
+    demo = false
+    loadLearningProgress()
+    await refresh()
+    await loadProfile()
+    await updateNotificationStatus()
+  }
   func login(email: String, password: String) async {
     busy = true
     error = nil
