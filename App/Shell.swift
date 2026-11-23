@@ -36,8 +36,6 @@ struct MainView: View {
         } else {
           NavigationStack { CertificatesView() }
             .tabItem { Label("Certificates", systemImage: "rosette") }.tag(2)
-          NavigationStack { BillingView() }
-            .tabItem { Label("Billing", systemImage: "creditcard.fill") }.tag(3)
         }
         NavigationStack { AccountView() }
           .tabItem { Label("Account", systemImage: "person.crop.circle.fill") }
@@ -404,8 +402,11 @@ struct ClassCard: View {
           Text(course.code ?? "Course").font(.caption.weight(.semibold))
             .foregroundStyle(Theme.accent)
           HStack(spacing: 6) {
+            ClassStatusChip(status: course.classStatus)
             if store.role == "trainer" { StatusChip(text: "Teaching", color: Theme.accent) }
-            if running { StatusChip(text: "In progress", color: Theme.success) }
+            if running && !(course.classStatus ?? "").lowercased().hasPrefix("cancel") {
+              StatusChip(text: "In progress", color: Theme.success)
+            }
           }
           Text(course.title).font(.headline).foregroundStyle(.primary)
             .multilineTextAlignment(.leading)
@@ -705,13 +706,95 @@ struct TaughtClassCard: View {
   }
 }
 
+/// The signed-in account's course certificates (GET /api/mobile/certificates): one row per
+/// class, with the certificate to view in the app and download once issued.
 struct CertificatesView: View {
+  @EnvironmentObject var store: Store
+  /// Inside another page (the trainer's Account) rather than its own tab.
+  var embedded = false
+  @State private var items: [CertificateItem]?
+  @State private var problem: String?
+
   var body: some View {
-    TabPage(title: "Certificates") {
-      ComingSoon(
-        icon: "rosette", title: "Coming soon",
-        text: "Your course certificates will appear here to view and download.")
+    TabPage(title: embedded ? "My Certificates" : "Certificates") {
+      if let items {
+        let issued = items.filter { $0.certificateURL != nil }
+        HStack(spacing: 8) {
+          HoursTile(label: "Certificates", value: "\(issued.count)", strong: true)
+          HoursTile(label: "Classes", value: "\(items.count)")
+        }
+        if items.isEmpty {
+          ComingSoon(icon: "rosette", title: "No certificates yet",
+                     text: "Certificates appear here once your class is complete and the certificate is issued.")
+        }
+        ForEach(items) { item in
+          InfoCard {
+            VStack(alignment: .leading, spacing: 8) {
+              Text(item.code ?? "Course").font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+              Text(item.title).font(.headline)
+              Label(Fmt.range(item.startDate, item.endDate), systemImage: "calendar")
+                .font(.footnote).foregroundStyle(.secondary)
+              if let result = item.result, !result.isEmpty {
+                StatusChip(text: result, color: result.lowercased().hasPrefix("competent") ? .green : .orange)
+              }
+              if let url = item.certificateURL {
+                DocumentRow(
+                  courseID: item.courseID,
+                  material: CourseMaterial(id: "certificate-\(item.id)", title: "Certificate", symbol: "rosette", rawURL: url))
+              } else {
+                Label("Certificate not issued yet", systemImage: "hourglass").font(.subheadline)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+        }
+      } else if let problem {
+        ErrorCard(message: problem) { Task { await load() } }
+      } else {
+        ProgressView("Loading certificates…").frame(maxWidth: .infinity).padding(.top, 30)
+      }
     }
+    .task { if items == nil { await load() } }
+    .refreshable { await load() }
+  }
+
+  private func load() async {
+    if store.demo {
+      items = [CertificateItem(
+        id: "c1", courseID: "sample", title: "Responsible Generative AI Basics (sample)", code: "TGS-2025000000",
+        runCode: "100000", startDate: "2026-10-01", endDate: "2026-10-02", result: "Competent", certificateURL: nil)]
+      return
+    }
+    do {
+      let reply: CertificatesReply = try await API.shared.request("mobile/certificates")
+      items = reply.certificates
+      problem = nil
+    } catch { problem = error.localizedDescription }
+  }
+}
+
+struct CertificateItem: Decodable, Identifiable {
+  let id: String
+  let courseID: String
+  let title: String
+  let code: String?
+  let runCode: String?
+  let startDate: String?
+  let endDate: String?
+  let result: String?
+  let certificateURL: String?
+}
+struct CertificatesReply: Decodable { let certificates: [CertificateItem] }
+
+/// The class status as the TMS records it: Confirmed (green), Pending (orange), Cancelled (red).
+struct ClassStatusChip: View {
+  let status: String?
+  var body: some View {
+    let s = (status ?? "").trimmingCharacters(in: .whitespaces)
+    let lower = s.lowercased()
+    StatusChip(
+      text: s.isEmpty ? "Pending" : lower.hasPrefix("cancel") ? "Cancelled" : s,
+      color: lower == "confirmed" ? .green : lower.hasPrefix("cancel") ? .red : .orange)
   }
 }
 
@@ -853,6 +936,19 @@ struct AccountView: View {
           ViewAsMenu()
         } footer: {
           Text("Owner account only: see the app as each role. The server still checks every request.")
+        }
+      }
+
+      if store.role == "trainer" {
+        Section {
+          NavigationLink {
+            CertificatesView(embedded: true)
+          } label: {
+            Label("My Certificates", systemImage: "rosette")
+          }
+          .accessibilityIdentifier("my-certificates")
+        } footer: {
+          Text("Certificates from courses you attended as a learner.")
         }
       }
 

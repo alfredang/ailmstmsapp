@@ -320,6 +320,9 @@ struct SignatureSetupSheet: View {
   var signing = false
   /// How many records this signature goes on (trainer "Sign all").
   var count = 1
+  /// What is being signed, for the footer.
+  var what = "the Assessment Summary Record"
+  var title = "Sign Summary Record"
   let done: (Bool) -> Void
   @State private var name = ""
   @State private var nric = ""
@@ -349,7 +352,7 @@ struct SignatureSetupSheet: View {
         } footer: {
           Text(
             signing
-              ? "Your signature, name and today's date are stamped on the Assessment Summary Record"
+              ? "Your signature, name and today's date are stamped on \(what)"
                 + (count > 1 ? " of \(count) learners." : ".")
               : hadSignature && strokes.isEmpty
                 ? "Leave blank to keep your saved signature." : "Sign inside the box.")
@@ -358,7 +361,7 @@ struct SignatureSetupSheet: View {
           Text(problem).foregroundStyle(.red).font(.footnote)
         }
       }
-      .navigationTitle(signing ? "Sign Summary Record" : kind.title).navigationBarTitleDisplayMode(.inline)
+      .navigationTitle(signing ? title : kind.title).navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { done(false) } }
         ToolbarItem(placement: .confirmationAction) {

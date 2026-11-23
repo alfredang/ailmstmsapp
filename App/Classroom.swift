@@ -183,10 +183,14 @@ struct CourseDetail: View {
           briefing(detail)
         }
         assessment(detail)
-        summaryRecord(detail)
+        // Website order: the learner signs right after Assessment; the trainer grades first,
+        // then signs the record (Assessment Grading, then Assessment Summary Record).
         if trainer {
           grading(detail)
+          summaryRecord(detail)
           feedbackSummary(detail)
+        } else {
+          summaryRecord(detail)
         }
       } else if let problem {
         courseware
@@ -460,6 +464,9 @@ struct CourseDetail: View {
   @ViewBuilder private func announcements(_ detail: ClassDetail) -> some View {
     fold("Announcements", icon: "megaphone") {
       let items = detail.announcements ?? []
+      if trainer {
+        AnnouncementComposer(runID: detail.id) { Task { await load() } }
+      }
       if items.isEmpty {
         Text("No announcements yet.").font(.subheadline).foregroundStyle(.secondary)
       }
@@ -474,6 +481,9 @@ struct CourseDetail: View {
           if let link = item.linkURL { MaterialLink(title: "Open link", icon: "link", raw: link) }
           if let file = item.fileURL {
             MaterialLink(title: item.fileName ?? "Attachment", icon: "paperclip", raw: file)
+          }
+          if trainer {
+            AnnouncementDeleteButton(id: item.id) { Task { await load() } }
           }
         }
         .padding(.vertical, 2)
@@ -1674,73 +1684,6 @@ struct AssessmentView: View {
       message = "Your file was submitted."
       await load()
     } catch { message = error.localizedDescription }
-  }
-}
-
-struct GradingView: View {
-  @EnvironmentObject var store: Store
-  let courseID: String
-  @State private var detail: ClassDetail?
-  @State private var pending: (learner: RosterLearner, competent: Bool)?
-  @State private var problem: String?
-
-  var body: some View {
-    List {
-      if let roster = detail?.roster {
-        if roster.isEmpty {
-          Label("No learners on this class yet", systemImage: "person.2.slash").foregroundStyle(
-            .secondary)
-        }
-        ForEach(roster) { learner in
-          VStack(alignment: .leading, spacing: 8) {
-            Text(learner.name).font(.headline)
-            Text(
-              "\(learner.submissions ?? 0) file(s) submitted · \(learner.status?.isEmpty == false ? learner.status! : "Not graded")"
-            ).font(.caption).foregroundStyle(.secondary)
-            HStack {
-              Button("Competent") { pending = (learner, true) }
-                .buttonStyle(.borderedProminent).disabled(learner.isCompetent == true)
-              Button("Not Yet Competent") { pending = (learner, false) }
-                .buttonStyle(.bordered).disabled(learner.isCompetent == false)
-            }
-          }.padding(.vertical, 4)
-        }
-      } else if let problem {
-        Label(problem, systemImage: "wifi.exclamationmark").foregroundStyle(.secondary)
-      } else {
-        ProgressView()
-      }
-    }
-    .navigationTitle("Grading").navigationBarTitleDisplayMode(.inline)
-    .task { await load() }
-    .refreshable { await load() }
-    .confirmationDialog(
-      pending.map {
-        "Mark \($0.learner.name) as \($0.competent ? "Competent" : "Not Yet Competent")?"
-      } ?? "", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
-      titleVisibility: .visible
-    ) {
-      Button("Confirm result") {
-        guard let choice = pending else { return }
-        Task {
-          do {
-            try await store.grade(
-              enrolmentID: choice.learner.enrolmentId, competent: choice.competent,
-              courseID: courseID)
-            await load()
-          } catch { store.error = error.localizedDescription }
-        }
-      }
-    } message: {
-      Text("Review each learner's submitted files in the portal before confirming.")
-    }
-  }
-
-  private func load() async {
-    do {
-      detail = try await store.classDetail(courseID)
-      problem = nil
-    } catch { problem = error.localizedDescription }
   }
 }
 

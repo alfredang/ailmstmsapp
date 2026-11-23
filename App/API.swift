@@ -85,10 +85,47 @@ final class API {
     }
     return (link, info["studentFolderId"] as? String)
   }
+  /// A multipart/form-data POST to a portal route (text fields plus at most one file).
+  /// Returns the decoded JSON reply; a non-2xx reply throws with the server's error text.
+  func multipart<T: Decodable>(
+    _ path: String, fields: [String: String], file: (data: Data, name: String, mime: String)?
+  ) async throws -> T {
+    var request = URLRequest(url: base.appendingPathComponent("api/" + path))
+    request.httpMethod = "POST"
+    request.timeoutInterval = 300
+    let boundary = "tia-" + UUID().uuidString
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    if let token { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
+    var body = Data()
+    for (key, value) in fields.sorted(by: { $0.key < $1.key }) {
+      body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(key)\"\r\n\r\n\(value)\r\n".utf8))
+    }
+    if let file {
+      let name = file.name.replacingOccurrences(of: "\"", with: "")
+      body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\n".utf8))
+      body.append(Data("Content-Type: \(file.mime)\r\n\r\n".utf8))
+      body.append(file.data)
+      body.append(Data("\r\n".utf8))
+    }
+    body.append(Data("--\(boundary)--\r\n".utf8))
+    let (data, response) = try await URLSession.shared.upload(for: request, from: body)
+    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+    if status == 401 {
+      await MainActor.run { NotificationCenter.default.post(name: .sessionExpired, object: nil) }
+    }
+    guard (200..<300).contains(status) else {
+      let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+      throw APIError(
+        message: json?["error"] as? String ?? json?["message"] as? String
+          ?? "The portal could not complete this request (\(status)). Please try again.")
+    }
+    return try JSONDecoder().decode(T.self, from: data)
+  }
   func dashboard(role: String) async throws -> Dashboard {
     var components = URLComponents(
       url: base.appendingPathComponent("api/mobile/dashboard"), resolvingAgainstBaseURL: false)!
-    components.queryItems = [URLQueryItem(name: "role", value: role)]
+    // includeCancelled: the class list shows cancelled classes with their status.
+    components.queryItems = [URLQueryItem(name: "role", value: role), URLQueryItem(name: "includeCancelled", value: "1")]
     var req = URLRequest(url: components.url!)
     req.timeoutInterval = 30
     if let token { req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }

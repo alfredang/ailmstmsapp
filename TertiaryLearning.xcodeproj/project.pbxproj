@@ -11,8 +11,10 @@
 		254379F13345B591D5327842 /* quiz-result.json in Resources */ = {isa = PBXBuildFile; fileRef = C4ABBB9C8C9183B6FD6CF6AE /* quiz-result.json */; };
 		2F56F928040449D311A170CD /* dashboard.json in Resources */ = {isa = PBXBuildFile; fileRef = A242A88EEF2BD51AEDB5E859 /* dashboard.json */; };
 		3009EECB0D98662CA480DF12 /* quiz.json in Resources */ = {isa = PBXBuildFile; fileRef = 2156F7EDD00A1FA282431452 /* quiz.json */; };
+		33BCAEE8A7D2C6031D203632 /* Announcements.swift in Sources */ = {isa = PBXBuildFile; fileRef = 779728E7A4CF7644681F0E38 /* Announcements.swift */; };
 		5C0B51591AA5BBE632522CBA /* profile.json in Resources */ = {isa = PBXBuildFile; fileRef = 2F8B19992671DFB843B2492F /* profile.json */; };
 		61147BC5CEB369A2F45FDF2B /* SummaryRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ED62148F057079F0D416B68 /* SummaryRecord.swift */; };
+		631E275EAE72A1C6457BBB9F /* Grading.swift in Sources */ = {isa = PBXBuildFile; fileRef = F27A5A0653753A28A6DFE77B /* Grading.swift */; };
 		79FD44F453E060A99302AEB2 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */; };
 		8213991C3874646E302C8288 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629A40E655F36DF22972348D /* Store.swift */; };
 		82C032C7F634E05ED3DADEFC /* feedback.json in Resources */ = {isa = PBXBuildFile; fileRef = BFC1431F6C2951AE40086F42 /* feedback.json */; };
@@ -68,6 +70,7 @@
 		580FD70CFDCBB4F3337E5E14 /* Sample.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sample.swift; sourceTree = "<group>"; };
 		629A40E655F36DF22972348D /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
 		6ED62148F057079F0D416B68 /* SummaryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryRecord.swift; sourceTree = "<group>"; };
+		779728E7A4CF7644681F0E38 /* Announcements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Announcements.swift; sourceTree = "<group>"; };
 		8031B41871EF04A072700BF6 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
 		8198AFA41FCE785D323CF56D /* attendance.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = attendance.json; sourceTree = "<group>"; };
 		8A2618B61D14ED65618D777C /* class-trainer.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "class-trainer.json"; sourceTree = "<group>"; };
@@ -82,6 +85,7 @@
 		D2BF6AC230D585BC3D3E0CAD /* Quiz.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Quiz.swift; sourceTree = "<group>"; };
 		EA17AB40AA19DE109359777A /* Shell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shell.swift; sourceTree = "<group>"; };
 		EDC25E3783839C5200DC519B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		F27A5A0653753A28A6DFE77B /* Grading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Grading.swift; sourceTree = "<group>"; };
 		F982FEB7BE829D8AD7F551D5 /* LearningWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningWorkspace.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -100,10 +104,12 @@
 		25524D7C6F7D888629410AB1 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				779728E7A4CF7644681F0E38 /* Announcements.swift */,
 				A236E80D7C4204042E587CA2 /* API.swift */,
 				27B244360A87BC0578B8D564 /* Assets.xcassets */,
 				20D13DC42FAA976E2E7DF195 /* BrandHeader.swift */,
 				119E90349B679B3D30AAB95D /* Classroom.swift */,
+				F27A5A0653753A28A6DFE77B /* Grading.swift */,
 				F982FEB7BE829D8AD7F551D5 /* LearningWorkspace.swift */,
 				C6D6CC362EEC3F1E8CBE3F8F /* Models.swift */,
 				D2BF6AC230D585BC3D3E0CAD /* Quiz.swift */,
@@ -308,8 +314,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				EA61A948CC1EAC9341BD3A22 /* API.swift in Sources */,
+				33BCAEE8A7D2C6031D203632 /* Announcements.swift in Sources */,
 				CC7DA029776C06284C2CF037 /* BrandHeader.swift in Sources */,
 				EA9F113385EFB9BE71B515C2 /* Classroom.swift in Sources */,
+				631E275EAE72A1C6457BBB9F /* Grading.swift in Sources */,
 				A650C0D63CFCAF56A8867F4E /* LearningWorkspace.swift in Sources */,
 				79FD44F453E060A99302AEB2 /* Models.swift in Sources */,
 				F053C89B7174B988435FE7C5 /* Quiz.swift in Sources */,
