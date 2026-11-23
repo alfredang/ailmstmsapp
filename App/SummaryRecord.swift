@@ -82,37 +82,40 @@ struct LearnerSummaryRecordView: View {
 
   var body: some View {
     Group {
+      // .task and .sheet sit on this one row: on a Group they would be copied onto every row.
       LabeledContent("Assessment Result", value: assessmentStatus ?? "Pending")
+        .task { await load() }
+        .sheet(isPresented: $setup) {
+          SignatureSetupSheet(kind: .learner, signing: true) { saved in
+            setup = false
+            if saved { Task { await sign() } }
+          }
+          .environmentObject(store)
+        }
       if let reply {
         let record = reply.record
         SignedRow(title: "Candidate (you)", party: record?.learner)
         SignedRow(title: "Assessor", party: record?.trainer)
-        if record?.learner == nil {
-          Button {
-            Task { await signTapped() }
-          } label: {
-            Label(busy ? "Signing…" : "Sign my Assessment Summary Record", systemImage: "signature")
-              .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
-          }
-          .buttonStyle(.borderedProminent).tint(Theme.accent).disabled(busy)
-          .accessibilityIdentifier("sign-summary-record")
+        // Every signature is drawn on the phone at the moment of signing.
+        Button {
+          setup = true
+        } label: {
+          Label(
+            busy ? "Signing…" : record?.learner == nil ? "Sign my Assessment Summary Record" : "Sign again",
+            systemImage: "signature"
+          )
+          .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
         }
+        .buttonStyle(.borderedProminent).tint(record?.learner == nil ? Theme.accent : .gray).disabled(busy)
+        .accessibilityIdentifier("sign-summary-record")
         if let file = record?.file {
           MaterialLink(title: "Open signed record (PDF)", icon: "doc.richtext", raw: file.url)
         }
-        Button("Change my saved signature") { setup = true }.font(.footnote).buttonStyle(.borderless)
       } else if problem == nil {
         ProgressView()
       }
       if let problem {
         Text(problem).font(.footnote).foregroundStyle(.red)
-      }
-    }
-    .task { await load() }
-    .sheet(isPresented: $setup) {
-      SignatureSetupSheet(kind: .learner) { saved in
-        setup = false
-        if saved { Task { await sign() } }
       }
     }
   }
@@ -129,15 +132,11 @@ struct LearnerSummaryRecordView: View {
     } catch { problem = error.localizedDescription }
   }
 
-  private func signTapped() async {
+  private func sign() async {
     if store.demo {
-      problem = "Signing is available when you sign in with your account."
+      problem = "Signed in the sample only. Sign in with your account to sign your record."
       return
     }
-    if reply?.hasSignature == true { await sign() } else { setup = true }
-  }
-
-  private func sign() async {
     busy = true
     defer { busy = false }
     do {
@@ -175,18 +174,28 @@ struct TrainerSummaryRecordView: View {
 
   var body: some View {
     Group {
-      if let learners {
-        let signedByLearner = learners.filter { $0.record?.learner != nil }.count
-        let signedByMe = learners.filter { $0.record?.trainer != nil }.count
-        HStack(spacing: 8) {
-          HoursTile(label: "Learners", value: "\(learners.count)")
-          HoursTile(label: "Candidate signed", value: "\(signedByLearner)")
-          HoursTile(label: "Assessor signed", value: "\(signedByMe)", strong: true)
+      // The tiles row is always shown and carries .task and .sheet (a Group would copy them per row).
+      HStack(spacing: 8) {
+        HoursTile(label: "Learners", value: learners.map { "\($0.count)" } ?? "…")
+        HoursTile(label: "Candidate signed", value: learners.map { "\($0.filter { $0.record?.learner != nil }.count)" } ?? "…")
+        HoursTile(label: "Assessor signed", value: learners.map { "\($0.filter { $0.record?.trainer != nil }.count)" } ?? "…", strong: true)
+      }
+      .padding(.vertical, 4)
+      .task { await load() }
+      .sheet(isPresented: $setup) {
+        SignatureSetupSheet(kind: .assessor, signing: true, count: pending.count) { saved in
+          setup = false
+          let ids = pending
+          pending = []
+          if saved, !ids.isEmpty { Task { await sign(ids) } }
         }
-        .padding(.vertical, 4)
+        .environmentObject(store)
+      }
+      if let learners {
         if awaitingMe.count > 1 {
           Button {
-            Task { await signTapped(awaitingMe.map(\.learnerUserId)) }
+            pending = awaitingMe.map(\.learnerUserId)
+            setup = true
           } label: {
             Label("Sign all \(awaitingMe.count) as assessor", systemImage: "signature")
               .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
@@ -200,24 +209,16 @@ struct TrainerSummaryRecordView: View {
         ForEach(learners) { learner in
           TrainerSummaryRow(
             learner: learner, busy: busy.contains(learner.learnerUserId),
-            sign: { Task { await signTapped([learner.learnerUserId]) } })
+            sign: {
+              pending = [learner.learnerUserId]
+              setup = true
+            })
         }
-        Button("Change my assessor signature") { setup = true }.font(.footnote)
-          .buttonStyle(.borderless)
       } else if problem == nil {
         ProgressView()
       }
       if let problem {
         Text(problem).font(.footnote).foregroundStyle(.red)
-      }
-    }
-    .task { await load() }
-    .sheet(isPresented: $setup) {
-      SignatureSetupSheet(kind: .assessor) { saved in
-        setup = false
-        let ids = pending
-        pending = []
-        if saved, !ids.isEmpty { Task { await sign(ids) } }
       }
     }
   }
@@ -235,12 +236,11 @@ struct TrainerSummaryRecordView: View {
     } catch { problem = error.localizedDescription }
   }
 
-  private func signTapped(_ ids: [String]) async {
-    // The assessor profile is checked by the server; a missing one asks for setup first.
-    await sign(ids)
-  }
-
   private func sign(_ ids: [String]) async {
+    if store.demo {
+      problem = "Signed in the sample only. Sign in with your account to sign records."
+      return
+    }
     for id in ids {
       busy.insert(id)
       defer { busy.remove(id) }
@@ -285,10 +285,8 @@ private struct TrainerSummaryRow: View {
           MaterialLink(title: "PDF", icon: "doc.richtext", raw: file.url)
         }
         Spacer()
-        if learner.record?.trainer == nil {
-          Button(busy ? "Signing…" : "Sign", action: sign)
-            .buttonStyle(.bordered).tint(Theme.accent).disabled(busy)
-        }
+        Button(busy ? "Signing…" : learner.record?.trainer == nil ? "Sign" : "Sign again", action: sign)
+          .buttonStyle(.bordered).tint(learner.record?.trainer == nil ? Theme.accent : .gray).disabled(busy)
       }
     }
     .padding(.vertical, 4)
@@ -316,7 +314,12 @@ private struct SignedRow: View {
 
 /// Name, NRIC and a drawn signature, saved once and reused for every record (as on the website).
 struct SignatureSetupSheet: View {
+  @EnvironmentObject var store: Store
   let kind: SignerKind
+  /// Signing a record: the signature must be drawn now, and the button reads "Sign".
+  var signing = false
+  /// How many records this signature goes on (trainer "Sign all").
+  var count = 1
   let done: (Bool) -> Void
   @State private var name = ""
   @State private var nric = ""
@@ -345,20 +348,24 @@ struct SignatureSetupSheet: View {
           Text("Sign with your finger")
         } footer: {
           Text(
-            hadSignature && strokes.isEmpty
-              ? "Leave blank to keep your saved signature." : "Sign inside the box.")
+            signing
+              ? "Your signature, name and today's date are stamped on the Assessment Summary Record"
+                + (count > 1 ? " of \(count) learners." : ".")
+              : hadSignature && strokes.isEmpty
+                ? "Leave blank to keep your saved signature." : "Sign inside the box.")
         }
         if let problem {
           Text(problem).foregroundStyle(.red).font(.footnote)
         }
       }
-      .navigationTitle(kind.title).navigationBarTitleDisplayMode(.inline)
+      .navigationTitle(signing ? "Sign Summary Record" : kind.title).navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { done(false) } }
         ToolbarItem(placement: .confirmationAction) {
-          Button(saving ? "Saving…" : "Save") { Task { await save() } }
+          Button(saving ? "Saving…" : signing ? "Sign" : "Save") { Task { await save() } }
             .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty
-              || (strokes.isEmpty && !hadSignature))
+              || (strokes.isEmpty && (signing || !hadSignature)))
+            .accessibilityIdentifier("confirm-signature")
         }
       }
       .task { await load() }
@@ -367,6 +374,11 @@ struct SignatureSetupSheet: View {
   }
 
   private func load() async {
+    // Sample mode has no session: a server call would answer 401 and sign the sample out.
+    if store.demo {
+      name = kind == .learner ? "Jamie Lim (sample)" : "Alex Tan (sample)"
+      return
+    }
     if let reply: SignerReply = try? await API.shared.request(kind.path) {
       name = reply.data?.name ?? ""
       nric = reply.data?.nric ?? ""
@@ -375,6 +387,10 @@ struct SignatureSetupSheet: View {
   }
 
   private func save() async {
+    if store.demo {
+      done(true)
+      return
+    }
     saving = true
     defer { saving = false }
     var body: [String: Any] = ["name": name, "nric": nric]
@@ -439,7 +455,11 @@ struct SignaturePad: View {
         .stroke(Color.black, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
         .allowsHitTesting(false)
       }
+      .accessibilityElement(children: .ignore)
       .accessibilityLabel("Signature pad")
+      .accessibilityHint("Sign with your finger inside the box")
+      .accessibilityAddTraits(.allowsDirectInteraction)
+      .accessibilityIdentifier("signature-pad")
     }
   }
 

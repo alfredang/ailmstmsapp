@@ -114,6 +114,21 @@ final class NavigationTests: XCTestCase {
     capture("09-assessment")
     app.navigationBars.buttons.firstMatch.tap()
 
+    // Assessment Summary Record: signing always opens the pad; Sign needs a drawn signature.
+    open("Assessment Summary Record")
+    reveal(app.buttons["sign-summary-record"]).tap()
+    XCTAssertTrue(app.navigationBars["Sign Summary Record"].waitForExistence(timeout: 5))
+    let confirm = app.buttons["confirm-signature"]
+    XCTAssertFalse(confirm.isEnabled)
+    let pad = app.descendants(matching: .any)["signature-pad"]
+    XCTAssertTrue(pad.waitForExistence(timeout: 5))
+    pad.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.6))
+      .press(forDuration: 0.05, thenDragTo: pad.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.4)))
+    XCTAssertTrue(confirm.isEnabled)
+    capture("10a-sign-summary-record")
+    confirm.tap()
+    XCTAssertTrue(app.staticTexts["Signed in the sample only. Sign in with your account to sign your record."].waitForExistence(timeout: 5))
+
     // Course feedback: required ratings, then sent.
     open("Course Feedback & TRAQOM Survey")
     reveal(app.buttons["course-feedback"]).tap()
