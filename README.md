@@ -10,6 +10,10 @@ A SwiftUI iPhone and iPad app for [AI-LMS-TMS](https://github.com/alfredang/AI-L
 - Assessments: learners submit files for published assessments; trainers publish each assessment and record Competent / Not Yet Competent.
 - Assessment Summary Record e-signing: learners sign as candidate, trainers sign as assessor (one by one or all at once), with a finger-drawn signature saved once.
 - Post Course Feedback Summary for trainers: average per question, overall score and comments, without learner names.
+- Trainers post class announcements with a photo or file, and grade from a roster that shows each learner's WA / PP submissions, a TRAQOM tick and the assessor signature on submitted files.
+- Certificates: learners (tab) and trainers (Account) view and download their certificates.
+- Class status (Confirmed, Pending, Cancelled) on every class card; a learner Support tab (feedback emailed to the academy, email, tel, WhatsApp, address).
+- Trainer credentials: ACLP, DDDPL and TAEPP badges with toggles, domain expertise and skill tags.
 - Roles: an admin Google sign-in shows Admin; the owner account can switch the view between Learner, Trainer, Developer and Admin.
 - Admin: Current and Upcoming classes, an academy calendar, the course catalogue, and WhatsApp a trainer about a class (prefilled message). Developer: the course catalogue. Both are read-only; class status and trainer assignment stay on the website, where TPGateway is updated.
 - Class quizzes: scanning the trainer's quiz QR code (`https://lms-tms.tertiaryinfotech.com/quiz/<courseId>/<quizId>`) opens the quiz in the app through a universal link; one question at a time, then the marked result, with retake. A signed-out learner signs in first and the quiz opens straight after.
@@ -34,7 +38,7 @@ xcodebuild -project TertiaryLearning.xcodeproj -scheme TertiaryLearning -destina
 
 The live server code is the AI-LMS-TMS repository (`lib/mobile/app.ts` builds the class page data); the `backend/` checkout here is an older copy. Mobile routes derive identity from a verified server-side session and validate the selected role. No user IDs from the device are trusted for data access.
 
-`/api/mobile/auth` and `/login` sign users in; `/me`, `/dashboard`, `/class`, `/attendance`, `/assessments`, `/feedback`, `/profile`, `/hours`, `/staff` (admin/developer, read-only), `/device` and `/delete-account` serve the native app (contract: `docs/mobile-app-api.md` in the backend). Class quizzes use the portal's `/api/courses/quiz` and `/api/courses/submit-quiz` with the same session token; the server marks the answers. Assessment publishing (`/api/assessments/publish-link`), summary-record signing (`/api/assessments/summary-record`) and saved signatures (`/api/learner/signature`, `/api/trainer/assessor-signature`) also use the portal's own routes, which check the class trainer or the enrolled learner. The portal serves `/.well-known/apple-app-site-association` for `GU9WTSTX9M.com.tertiaryinfotech.ailmstms` (paths `/quiz/*`), matching the app's `applinks:lms-tms.tertiaryinfotech.com` entitlement. `/send-reminders` accepts only the configured machine API key. Read [the backend configuration guide](https://github.com/alfredang/AI-LMS-TMS/blob/main/docs/mobile-ios.md) for configuration and verification. The backend is a separate repository and is intentionally excluded from this app repository.
+`/api/mobile/auth` and `/login` sign users in; `/me`, `/dashboard`, `/class`, `/attendance`, `/assessments`, `/feedback`, `/profile`, `/hours`, `/certificates`, `/support`, `/trainer-profile`, `/staff` (admin/developer, read-only), `/device` and `/delete-account` serve the native app (contract: `docs/mobile-app-api.md` in the backend). Class quizzes use the portal's `/api/courses/quiz` and `/api/courses/submit-quiz` with the same session token; the server marks the answers. Assessment publishing (`/api/assessments/publish-link`), summary-record signing (`/api/assessments/summary-record`) and saved signatures (`/api/learner/signature`, `/api/trainer/assessor-signature`) also use the portal's own routes, which check the class trainer or the enrolled learner. The portal serves `/.well-known/apple-app-site-association` for `GU9WTSTX9M.com.tertiaryinfotech.ailmstms` (paths `/quiz/*`), matching the app's `applinks:lms-tms.tertiaryinfotech.com` entitlement. `/send-reminders` accepts only the configured machine API key. Read [the backend configuration guide](https://github.com/alfredang/AI-LMS-TMS/blob/main/docs/mobile-ios.md) for configuration and verification. The backend is a separate repository and is intentionally excluded from this app repository.
 
 ## Release
 
@@ -42,6 +46,7 @@ This repository contains the iOS app source only. Build output, App Store submis
 
 ## Release notes
 
+- **1.1 (11)**: Signatures are drawn on the phone each time; trainer announcements with photos and files; Assessment Grading roster (WA/PP ticks, TRAQOM, assessor signing); certificates to view and download; class status on every class card; learner Support tab; trainer credential badges (ACLP, DDDPL, TAEPP), domain expertise and skill tags; developer funding validity with expiry alerts.
 - **1.1 (10)**: Class page mirrors the website in a phone layout; assessment publishing, summary-record e-signing and the feedback summary; owner role switch; Admin and Developer views with WhatsApp a trainer.
 - **1.1 (8)**: Scan a quiz QR code to take class quizzes in the app.
 - **1.0 (7)**: Attendance, assessments, course feedback, in-app PDF courseware, profile and theme.
