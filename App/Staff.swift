@@ -41,12 +41,19 @@ struct StaffCourse: Decodable, Identifiable, Hashable {
   let tscCode: String?
   let trainingHours: Double?
   let assessmentHours: Double?
+  var fundingValidityStart: String? = nil
   let fundingValidityEnd: String?
   let upcomingRuns: Int
   let nextRun: String?
 
   var fundingEnd: Date? { Fmt.day(fundingValidityEnd) }
   var expired: Bool { title.localizedCaseInsensitiveContains("(expired)") || (fundingEnd.map { $0 < Date() } ?? false) }
+  /// Days until funding ends, when that is within 3 months (90 days) and not yet past.
+  var expiringInDays: Int? {
+    guard !expired, let end = fundingEnd else { return nil }
+    let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: end).day ?? 0
+    return days <= 90 ? max(days, 0) : nil
+  }
 }
 struct StaffCoursesReply: Decodable { let courses: [StaffCourse] }
 
@@ -435,7 +442,7 @@ struct CourseCatalogView: View {
   /// Inside the Home scroll view (no own page chrome).
   var embedded = false
   enum Filter: String, CaseIterable, Identifiable {
-    case all = "All", running = "With classes", expired = "Expired"
+    case all = "All", running = "With classes", expiring = "Expiring", expired = "Expired"
     var id: String { rawValue }
   }
   @State private var courses: [StaffCourse]?
@@ -448,6 +455,7 @@ struct CourseCatalogView: View {
       switch filter {
       case .all: break
       case .running: if c.upcomingRuns == 0 { return false }
+      case .expiring: if c.expiringInDays == nil { return false }
       case .expired: if !c.expired { return false }
       }
       return query.isEmpty || c.title.localizedCaseInsensitiveContains(query)
@@ -469,7 +477,7 @@ struct CourseCatalogView: View {
       if let courses {
         HStack(spacing: 8) {
           HoursTile(label: "Courses", value: "\(courses.count)")
-          HoursTile(label: "With classes", value: "\(courses.filter { $0.upcomingRuns > 0 }.count)")
+          HoursTile(label: "Expiring ≤ 3 mo", value: "\(courses.filter { $0.expiringInDays != nil }.count)")
           HoursTile(label: "Expired", value: "\(courses.filter(\.expired).count)", strong: true)
         }
         Picker("Show", selection: $filter) {
@@ -520,22 +528,26 @@ private struct CourseRow: View {
           HStack(alignment: .firstTextBaseline) {
             Text(item.code ?? "No code").font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
             if let type = item.courseType, !type.isEmpty { StatusChip(text: type, color: Theme.accent) }
+            StatusChip(text: item.expired ? "Expired" : "Active", color: item.expired ? .red : .green)
             Spacer()
             Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
               .rotationEffect(.degrees(open ? 180 : 0))
           }
           Text(item.title).font(.headline).foregroundStyle(.primary).multilineTextAlignment(.leading)
-          HStack(spacing: 14) {
-            Label(item.upcomingRuns == 0 ? "No upcoming classes" : "\(item.upcomingRuns) upcoming", systemImage: "calendar")
-            if let end = item.fundingEnd {
-              Label(
-                (item.expired ? "Expired " : "Funding to ") + end.formatted(.dateTime.day().month(.abbreviated).year()),
-                systemImage: "checkmark.seal"
-              )
-              .foregroundStyle(item.expired ? Color.red : Color.secondary)
-            }
+          if item.fundingValidityStart != nil || item.fundingValidityEnd != nil {
+            Label(
+              "Funding validity: "
+                + [item.fundingValidityStart, item.fundingValidityEnd]
+                .map { $0.map { Fmt.longDate($0) } ?? "N/A" }.joined(separator: " – "),
+              systemImage: "checkmark.seal"
+            )
+            .font(.footnote).foregroundStyle(item.expired ? Color.red : Color.secondary)
           }
-          .font(.footnote).foregroundStyle(.secondary)
+          if let days = item.expiringInDays {
+            ExpiringBadge(days: days)
+          }
+          Label(item.upcomingRuns == 0 ? "No upcoming classes" : "\(item.upcomingRuns) upcoming", systemImage: "calendar")
+            .font(.footnote).foregroundStyle(.secondary)
         }
       }
       .buttonStyle(.plain)
@@ -553,6 +565,26 @@ private struct CourseRow: View {
     .padding(14)
     .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.cardBorder, lineWidth: 1))
+  }
+}
+
+/// A blinking alert when course funding ends within 3 months.
+struct ExpiringBadge: View {
+  let days: Int
+  @State private var dim = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  var body: some View {
+    Label(days == 0 ? "Funding expires today" : "Funding expires in \(days) day\(days == 1 ? "" : "s")",
+          systemImage: "exclamationmark.triangle.fill")
+      .font(.caption.weight(.bold)).foregroundStyle(.white)
+      .padding(.horizontal, 10).padding(.vertical, 5)
+      .background(Color.orange, in: Capsule())
+      .opacity(dim ? 0.35 : 1)
+      .onAppear {
+        guard !reduceMotion else { return }
+        withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) { dim = true }
+      }
+      .accessibilityLabel("Alert: funding expires in \(days) days")
   }
 }
 

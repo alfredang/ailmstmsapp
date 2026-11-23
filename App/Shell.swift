@@ -18,10 +18,13 @@ struct MainView: View {
           .tabItem {
             Label(store.isStaffView ? "Home" : "My Classes", systemImage: store.isStaffView ? "house.fill" : "graduationcap.fill")
           }.tag(0)
-        NavigationStack {
-          if store.role == "admin" { AdminCalendarView() } else { CalendarView() }
+        // Developers have no classes to schedule, so no Calendar tab.
+        if store.role != "developer" {
+          NavigationStack {
+            if store.role == "admin" { AdminCalendarView() } else { CalendarView() }
+          }
+            .tabItem { Label("Calendar", systemImage: "calendar") }.tag(Store.calendarTab)
         }
-          .tabItem { Label("Calendar", systemImage: "calendar") }.tag(Store.calendarTab)
         // A trainer sees what they are paid and the hours they have taught;
         // a learner sees certificates and billing; Developer and Admin see their own page.
         if store.isStaffView {
@@ -36,6 +39,8 @@ struct MainView: View {
         } else {
           NavigationStack { CertificatesView() }
             .tabItem { Label("Certificates", systemImage: "rosette") }.tag(2)
+          NavigationStack { SupportView() }
+            .tabItem { Label("Support", systemImage: "lifepreserver") }.tag(3)
         }
         NavigationStack { AccountView() }
           .tabItem { Label("Account", systemImage: "person.crop.circle.fill") }
@@ -798,16 +803,6 @@ struct ClassStatusChip: View {
   }
 }
 
-struct BillingView: View {
-  var body: some View {
-    TabPage(title: "Billing") {
-      ComingSoon(
-        icon: "creditcard", title: "Coming soon",
-        text: "Your invoices and payment receipts will appear here.")
-    }
-  }
-}
-
 // MARK: - Account (one page: who you are, your details, settings)
 
 /// One contact detail; tapping it calls, emails, opens WhatsApp or the LinkedIn profile.
@@ -940,6 +935,7 @@ struct AccountView: View {
       }
 
       if store.role == "trainer" {
+        TrainerCredentialsSections()
         Section {
           NavigationLink {
             CertificatesView(embedded: true)
