@@ -40,3 +40,9 @@ release/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Distribution archives (rebuildable — never pushed to GitHub)
+*.zip
+
+# Source material the project was derived from — not ours to republish.
+**/reference/
