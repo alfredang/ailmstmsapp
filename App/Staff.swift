@@ -236,13 +236,130 @@ struct StaffClassSheet: View {
           if item.hasMeetingLink == true { InfoRow("Virtual class link", "Set") }
         }
         Section {
-          Text("Change the class status or assign a trainer on lms-tms.tertiaryinfotech.com, where TPGateway is updated.")
-            .font(.footnote).foregroundStyle(.secondary)
+          NavigationLink {
+            TrainerWhatsAppPicker(item: item)
+          } label: {
+            Label("WhatsApp a trainer", systemImage: "message.fill")
+          }
+          .accessibilityIdentifier("whatsapp-trainer")
+        } header: {
+          Text("Trainer")
+        } footer: {
+          Text("Opens WhatsApp with a message asking the trainer to take this class. Record the assignment on lms-tms.tertiaryinfotech.com, where TPGateway is updated.")
         }
       }
       .navigationTitle("Class").navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
     }
+  }
+}
+
+// MARK: - WhatsApp a trainer
+
+struct StaffTrainer: Decodable, Identifiable, Hashable {
+  var id: String { (email ?? "") + name }
+  let name: String
+  let email: String?
+  let phone: String?
+}
+struct StaffTrainersReply: Decodable { let trainers: [StaffTrainer] }
+
+/// Pick a trainer, then WhatsApp opens on this phone with a message about the class.
+struct TrainerWhatsAppPicker: View {
+  @EnvironmentObject var store: Store
+  let item: StaffClass
+  @Environment(\.openURL) private var openURL
+  @State private var trainers: [StaffTrainer]?
+  @State private var query = ""
+  @State private var problem: String?
+
+  private func matches(_ t: StaffTrainer) -> Bool {
+    query.isEmpty || t.name.localizedCaseInsensitiveContains(query)
+      || (t.email ?? "").localizedCaseInsensitiveContains(query)
+  }
+  private func assigned(_ t: StaffTrainer) -> Bool {
+    item.trainers.contains { $0.caseInsensitiveCompare(t.name) == .orderedSame }
+  }
+
+  /// The message the admin sends; they can edit it in WhatsApp before sending.
+  static func message(for t: StaffTrainer, item: StaffClass) -> String {
+    let first = t.name.split(separator: " ").first.map(String.init) ?? t.name
+    var lines = [
+      "Hi \(first), this is Tertiary Infotech Academy.",
+      "Are you available to train this class?",
+      "",
+      "\(item.title)" + (item.code.map { " (\($0))" } ?? ""),
+    ]
+    if let run = item.runCode { lines.append("Course Run: \(run)") }
+    lines.append("Dates: \(Fmt.range(item.startDate, item.endDate))")
+    if let format = item.format { lines.append("Class type: \(format)") }
+    if let venue = item.venue { lines.append("Venue: \(venue)") }
+    lines += ["", "Please reply to confirm. Thank you!"]
+    return lines.joined(separator: "\n")
+  }
+
+  static func whatsAppURL(phone: String, text: String) -> URL? {
+    let digits = phone.filter(\.isNumber)
+    guard !digits.isEmpty else { return nil }
+    var c = URLComponents(string: "https://wa.me/\(digits)")
+    c?.queryItems = [URLQueryItem(name: "text", value: text)]
+    return c?.url
+  }
+
+  var body: some View {
+    List {
+      if let trainers {
+        let mine = trainers.filter { assigned($0) && matches($0) }
+        let others = trainers.filter { !assigned($0) && matches($0) }
+        if !mine.isEmpty {
+          Section("Assigned to this class") { ForEach(mine) { row($0) } }
+        }
+        Section("All trainers (\(others.count))") { ForEach(others) { row($0) } }
+      } else if let problem {
+        Text(problem).foregroundStyle(.red)
+        Button("Try again") { Task { await load() } }
+      } else {
+        ProgressView("Loading trainers…")
+      }
+    }
+    .searchable(text: $query, prompt: "Search trainers")
+    .navigationTitle("WhatsApp a trainer").navigationBarTitleDisplayMode(.inline)
+    .task { if trainers == nil { await load() } }
+  }
+
+  private func row(_ t: StaffTrainer) -> some View {
+    Button {
+      if let phone = t.phone, let url = Self.whatsAppURL(phone: phone, text: Self.message(for: t, item: item)) {
+        openURL(url)
+      }
+    } label: {
+      HStack {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(t.name).foregroundStyle(.primary)
+          Text(t.phone ?? "No WhatsApp number on profile").font(.caption).foregroundStyle(.secondary)
+        }
+        Spacer()
+        if t.phone != nil {
+          Image(systemName: "message.fill").foregroundStyle(.green)
+        }
+      }
+    }
+    .disabled(t.phone == nil)
+  }
+
+  private func load() async {
+    if store.demo {
+      trainers = [
+        StaffTrainer(name: "Alex Tan (sample)", email: nil, phone: "+6580000000"),
+        StaffTrainer(name: "Priya Nair (sample)", email: nil, phone: nil),
+      ]
+      return
+    }
+    do {
+      let reply: StaffTrainersReply = try await API.shared.request("mobile/staff", query: ["view": "trainers"])
+      trainers = reply.trainers
+      problem = nil
+    } catch { problem = error.localizedDescription }
   }
 }
 

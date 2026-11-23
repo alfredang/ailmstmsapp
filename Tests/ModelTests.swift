@@ -296,6 +296,22 @@ final class ModelTests: XCTestCase {
       XCTFail("Expected the removed quiz to fail")
     } catch { XCTAssertEqual(error.localizedDescription, "Quiz not found") }
   }
+  func testWhatsAppTrainerMessageAndLink() {
+    let item = StaffClass(
+      id: "x", runCode: "1361797", title: "Agentic AI Applications with Claude Code", code: "TGS-2025052468",
+      startDate: "2026-11-21", endDate: "2026-11-22", format: "Hybrid", classStatus: "Confirmed",
+      hasMeetingLink: true, trainers: [], learners: 3, venue: "12 Woodland Square, Singapore 737715")
+    let t = StaffTrainer(name: "Alex Tan", email: nil, phone: "+6591234567")
+    let text = TrainerWhatsAppPicker.message(for: t, item: item)
+    XCTAssertTrue(text.hasPrefix("Hi Alex,"))
+    XCTAssertTrue(text.contains("Course Run: 1361797"))
+    XCTAssertTrue(text.contains("Venue: 12 Woodland Square"))
+    let url = TrainerWhatsAppPicker.whatsAppURL(phone: t.phone!, text: text)!
+    XCTAssertEqual(url.host, "wa.me")
+    XCTAssertEqual(url.path, "/6591234567")
+    XCTAssertTrue(url.absoluteString.contains("text=Hi%20Alex"))
+    XCTAssertNil(TrainerWhatsAppPicker.whatsAppURL(phone: "", text: "x"))
+  }
 }
 
 /// Answers the two quiz routes from the recorded fixtures and records what was asked.
@@ -344,4 +360,5 @@ final class PortalStub: URLProtocol {
     client?.urlProtocolDidFinishLoading(self)
   }
   override func stopLoading() {}
+
 }
