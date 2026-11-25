@@ -39,6 +39,27 @@ final class NavigationTests: XCTestCase {
     reveal(header)
     if header.value as? String != "Expanded" { header.tap() }
   }
+  /// One email that is both a trainer and a learner: "Switch role" on My Classes swaps the
+  /// classes and tabs to the other role, and back.
+  func testSwitchRoleShowsEachRolesClasses() {
+    let demo = app.buttons["demo"]
+    XCTAssertTrue(demo.waitForExistence(timeout: 15))
+    demo.tap()
+    app.buttons["As a trainer"].tap()
+    let switcher = app.buttons["view-as"]
+    XCTAssertTrue(switcher.waitForExistence(timeout: 10))
+    XCTAssertTrue(app.buttons["Payout"].firstMatch.exists)
+    capture("10-switch-role-trainer")
+    switcher.tap()
+    app.buttons["Learner"].firstMatch.tap()
+    XCTAssertTrue(app.buttons["Certificates"].firstMatch.waitForExistence(timeout: 10))
+    XCTAssertFalse(app.buttons["Payout"].exists)
+    XCTAssertTrue(switcher.label.contains("Learner"))
+    capture("11-switch-role-learner")
+    switcher.tap()
+    app.buttons["Trainer"].firstMatch.tap()
+    XCTAssertTrue(app.buttons["Payout"].firstMatch.waitForExistence(timeout: 10))
+  }
   func testLearnerAndTrainerNavigation() {
     let demo = app.buttons["demo"]
     XCTAssertTrue(demo.waitForExistence(timeout: 15))

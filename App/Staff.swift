@@ -28,6 +28,25 @@ struct StaffClass: Decodable, Identifiable, Hashable {
     return d >= Calendar.current.startOfDay(for: start) && d <= Calendar.current.startOfDay(for: end)
   }
   var cancelled: Bool { (classStatus ?? "").lowercased().hasPrefix("cancel") }
+  /// Confirmed, Cancelled, or Pending (anything else, such as Unconfirmed).
+  var statusBucket: RunStatus {
+    let s = (classStatus ?? "").lowercased()
+    if s == "confirmed" { return .confirmed }
+    if s.hasPrefix("cancel") { return .cancelled }
+    return .pending
+  }
+}
+
+enum RunStatus: String, CaseIterable, Identifiable {
+  case confirmed = "Confirmed", pending = "Pending", cancelled = "Cancelled"
+  var id: String { rawValue }
+  var color: Color {
+    switch self {
+    case .confirmed: return .green
+    case .pending: return .orange
+    case .cancelled: return .red
+    }
+  }
 }
 struct StaffClassesReply: Decodable { let classes: [StaffClass] }
 
@@ -45,6 +64,11 @@ struct StaffCourse: Decodable, Identifiable, Hashable {
   let fundingValidityEnd: String?
   let upcomingRuns: Int
   let nextRun: String?
+  // Run counts by status (absent from an older server).
+  var totalRuns: Int? = nil
+  var confirmedRuns: Int? = nil
+  var pendingRuns: Int? = nil
+  var cancelledRuns: Int? = nil
 
   var fundingEnd: Date? { Fmt.day(fundingValidityEnd) }
   var expired: Bool { title.localizedCaseInsensitiveContains("(expired)") || (fundingEnd.map { $0 < Date() } ?? false) }
@@ -69,6 +93,11 @@ enum StaffAPI {
   static func classes(from: Date, to: Date) async throws -> [StaffClass] {
     let reply: StaffClassesReply = try await API.shared.request(
       "mobile/staff", query: ["view": "classes", "from": iso.string(from: from), "to": iso.string(from: to)])
+    return reply.classes
+  }
+  /// Every run of one course, newest first (admin).
+  static func runs(courseId: String) async throws -> [StaffClass] {
+    let reply: StaffClassesReply = try await API.shared.request("mobile/staff", query: ["view": "runs", "courseId": courseId])
     return reply.classes
   }
   static func courses() async throws -> [StaffCourse] {
@@ -492,7 +521,7 @@ struct CourseCatalogView: View {
         .padding(10).background(Theme.card, in: RoundedRectangle(cornerRadius: 10))
         Text("\(shown.count) courses").font(.caption).foregroundStyle(.secondary)
         LazyVStack(spacing: 10) {
-          ForEach(shown) { c in CourseRow(item: c) }
+          ForEach(shown) { c in CourseRow(item: c, showRuns: store.role == "admin") }
         }
       } else if let problem {
         ErrorCard(message: problem) { Task { await load() } }
@@ -518,7 +547,10 @@ struct CourseCatalogView: View {
 
 private struct CourseRow: View {
   let item: StaffCourse
+  /// Admin: the run counts by status and the full list of course runs.
+  var showRuns = false
   @State private var open = false
+  @State private var runsOpen = false
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
       Button {
@@ -551,6 +583,30 @@ private struct CourseRow: View {
         }
       }
       .buttonStyle(.plain)
+      if showRuns, let total = item.totalRuns {
+        Button {
+          runsOpen = true
+        } label: {
+          HStack(spacing: 6) {
+            Image(systemName: "list.bullet.rectangle").foregroundStyle(Theme.accent)
+            Text("\(total) course run\(total == 1 ? "" : "s")").fontWeight(.semibold).foregroundStyle(Theme.accent)
+            if total > 0 {
+              RunCountChip(count: item.confirmedRuns ?? 0, status: .confirmed)
+              RunCountChip(count: item.pendingRuns ?? 0, status: .pending)
+              RunCountChip(count: item.cancelledRuns ?? 0, status: .cancelled)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+          }
+          .font(.footnote)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(total == 0)
+        .accessibilityLabel("\(total) course runs: \(item.confirmedRuns ?? 0) confirmed, \(item.pendingRuns ?? 0) pending, \(item.cancelledRuns ?? 0) cancelled")
+        .accessibilityIdentifier("course-runs-\(item.id)")
+        .sheet(isPresented: $runsOpen) { CourseRunsSheet(course: item) }
+      }
       if open {
         Divider()
         if let t = item.tscTitle, !t.isEmpty { InfoRow("TSC Title", t) }
@@ -565,6 +621,118 @@ private struct CourseRow: View {
     .padding(14)
     .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.cardBorder, lineWidth: 1))
+  }
+}
+
+/// "8" in the status colour, e.g. 8 confirmed runs.
+private struct RunCountChip: View {
+  let count: Int
+  let status: RunStatus
+  var body: some View {
+    Text("\(count) \(status.rawValue.lowercased())")
+      .font(.caption2.weight(.semibold))
+      .foregroundStyle(status.color)
+      .padding(.horizontal, 6).padding(.vertical, 2)
+      .background(status.color.opacity(0.12), in: Capsule())
+      .lineLimit(1)
+  }
+}
+
+/// Admin: every run of one course, upcoming then past, with each run's status and, when
+/// confirmed, its trainer. Tap a run for its summary.
+struct CourseRunsSheet: View {
+  @EnvironmentObject var store: Store
+  let course: StaffCourse
+  @Environment(\.dismiss) private var dismiss
+  @State private var runs: [StaffClass]?
+  @State private var problem: String?
+  @State private var filter: RunStatus?
+
+  private var today: Date { Calendar.current.startOfDay(for: Date()) }
+  private var shown: [StaffClass] { (runs ?? []).filter { filter == nil || $0.statusBucket == filter } }
+
+  var body: some View {
+    NavigationStack {
+      List {
+        if let runs {
+          Section {
+            Picker("Status", selection: $filter) {
+              Text("All (\(runs.count))").tag(RunStatus?.none)
+              ForEach(RunStatus.allCases) { st in
+                Text("\(st.rawValue) (\(runs.filter { $0.statusBucket == st }.count))").tag(RunStatus?.some(st))
+              }
+            }
+            .pickerStyle(.menu)
+          }
+          let upcoming = shown.filter { ($0.end ?? $0.start ?? .distantPast) >= today }.reversed()
+          let past = shown.filter { ($0.end ?? $0.start ?? .distantPast) < today }
+          if shown.isEmpty {
+            Text(runs.isEmpty ? "This course has no runs." : "No runs with this status.").foregroundStyle(.secondary)
+          }
+          if !upcoming.isEmpty {
+            Section("Upcoming and running (\(upcoming.count))") { ForEach(Array(upcoming)) { CourseRunRow(item: $0) } }
+          }
+          if !past.isEmpty {
+            Section("Past (\(past.count))") { ForEach(past) { CourseRunRow(item: $0) } }
+          }
+        } else if let problem {
+          Text(problem).foregroundStyle(.red)
+          Button("Try again") { Task { await load() } }
+        } else {
+          ProgressView("Loading course runs…")
+        }
+      }
+      .navigationTitle(course.code ?? "Course runs").navigationBarTitleDisplayMode(.inline)
+      .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+      .refreshable { await load() }
+      .task { if runs == nil { await load() } }
+    }
+  }
+
+  private func load() async {
+    if store.demo {
+      runs = StaffSample.runs
+      return
+    }
+    do {
+      runs = try await StaffAPI.runs(courseId: course.id)
+      problem = nil
+    } catch { problem = error.localizedDescription }
+  }
+}
+
+/// One course run: run ID, dates, status; a confirmed run shows its trainer.
+struct CourseRunRow: View {
+  let item: StaffClass
+  @State private var showing = false
+  var body: some View {
+    Button {
+      showing = true
+    } label: {
+      VStack(alignment: .leading, spacing: 5) {
+        HStack {
+          Text(item.runCode.map { "Run \($0)" } ?? "Run").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+          Spacer()
+          StatusChip(text: item.statusBucket.rawValue, color: item.statusBucket.color)
+        }
+        Label(Fmt.range(item.startDate, item.endDate), systemImage: "calendar")
+        if item.statusBucket == .confirmed {
+          Label(item.trainers.isEmpty ? "No trainer assigned" : item.trainers.joined(separator: ", "), systemImage: "person.fill")
+            .foregroundStyle(item.trainers.isEmpty ? Color.orange : Color.secondary)
+        }
+        HStack(spacing: 14) {
+          Label("\(item.learners) learner\(item.learners == 1 ? "" : "s")", systemImage: "person.3.fill")
+          if let format = item.format, !format.isEmpty {
+            Label(format, systemImage: format.localizedCaseInsensitiveContains("physical") ? "building.2.fill" : "video.fill")
+          }
+        }
+      }
+      .font(.footnote).foregroundStyle(.secondary)
+      .padding(.vertical, 2)
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("course-run-row")
+    .sheet(isPresented: $showing) { StaffClassSheet(item: item) }
   }
 }
 
@@ -614,11 +782,28 @@ enum StaffSample {
                  trainers: [], learners: 6, venue: nil),
     ]
   }
+  static var runs: [StaffClass] {
+    let f = StaffAPI.iso
+    let today = Date()
+    func day(_ n: Int) -> String { f.string(from: today.addingTimeInterval(Double(n) * 86400)) }
+    return [
+      StaffClass(id: "r1", runCode: "100003", title: "Agentic AI Applications with Claude Code (sample)", code: "TGS-2025052468",
+                 startDate: day(14), endDate: day(15), format: "Physical", classStatus: "Pending", hasMeetingLink: false,
+                 trainers: [], learners: 3, venue: nil),
+      StaffClass(id: "r2", runCode: "100001", title: "Agentic AI Applications with Claude Code (sample)", code: "TGS-2025052468",
+                 startDate: day(0), endDate: day(1), format: "Hybrid", classStatus: "Confirmed", hasMeetingLink: true,
+                 trainers: ["Alex Tan (sample)"], learners: 18, venue: "12 Woodlands Square, Singapore 737715"),
+      StaffClass(id: "r3", runCode: "099998", title: "Agentic AI Applications with Claude Code (sample)", code: "TGS-2025052468",
+                 startDate: day(-30), endDate: day(-29), format: "Virtual", classStatus: "Cancelled", hasMeetingLink: false,
+                 trainers: [], learners: 0, venue: nil),
+    ]
+  }
   static var courses: [StaffCourse] {
     [
       StaffCourse(id: "c1", title: "Agentic AI Applications with Claude Code (sample)", code: "TGS-2025052468", courseType: "WSQ",
                   status: nil, tscTitle: "Artificial Intelligence Application", tscCode: "EGS-TEM-3026-1.1",
-                  trainingHours: 7, assessmentHours: 1, fundingValidityEnd: "2027-01-29", upcomingRuns: 4, nextRun: nil),
+                  trainingHours: 7, assessmentHours: 1, fundingValidityEnd: "2027-01-29", upcomingRuns: 4, nextRun: nil,
+                  totalRuns: 3, confirmedRuns: 1, pendingRuns: 1, cancelledRuns: 1),
     ]
   }
 }

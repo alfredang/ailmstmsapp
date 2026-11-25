@@ -228,6 +228,29 @@ final class ModelTests: XCTestCase {
     store.clear()
   }
 
+  /// One email that is both a learner and a trainer switches between the two, and each role
+  /// loads its own classes. A role the account does not hold is never offered or applied.
+  @MainActor func testMultiRoleAccountSwitchesRoles() async {
+    let store = Store()
+    store.openDemo("trainer")
+    XCTAssertEqual(store.availableRoles, ["learner", "trainer"])
+    XCTAssertTrue(store.canSwitchRole)
+    store.selectedTab = Store.accountTab
+    await store.setViewRole("learner")
+    XCTAssertEqual(store.role, "learner")
+    XCTAssertEqual(store.selectedTab, 0)
+    XCTAssertEqual(
+      store.dashboard.courses.map(\.id), Sample.data(role: "learner").courses.map(\.id))
+    await store.setViewRole("developer")
+    XCTAssertEqual(store.role, "learner")
+    await store.setViewRole("trainer")
+    XCTAssertEqual(store.role, "trainer")
+    XCTAssertEqual(
+      store.dashboard.courses.map(\.id), Sample.data(role: "trainer").courses.map(\.id))
+    store.clear()
+    XCTAssertNil(UserDefaults.standard.string(forKey: "viewRole"))
+  }
+
   @MainActor func testQuizLinkWaitsForSignInAndSampleQuizScores() async throws {
     let store = Store()
     XCTAssertFalse(store.handle(url: URL(string: "https://lms-tms.tertiaryinfotech.com/mobile/privacy.html")!))

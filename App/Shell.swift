@@ -159,7 +159,8 @@ struct TabPage<Content: View>: View {
 // MARK: - My Classes (home)
 
 /// Top of My Classes, in the TIA house layout: a "Welcome back" card with the full name,
-/// the role and a My Profile link, then (for the owner account only) a "View as" row.
+/// the role and a My Profile link, then, for an email that holds more than one role, the
+/// "Switch role" row.
 struct HomeHeader: View {
   @EnvironmentObject var store: Store
 
@@ -211,8 +212,10 @@ extension View {
   }
 }
 
-/// The owner's "View as" switcher: Learner, Trainer, Developer or Admin. Shown on My Classes
-/// and on the Account page. It changes what this device shows, never what the server allows.
+/// "Switch role": the roles this email holds (Learner, Trainer, Developer; Admin after an admin
+/// sign-in; all four for the owner). Choosing one reloads My Classes, the calendar and the tabs
+/// for that role. Shown on My Classes and on the Account page. It changes what this device
+/// shows, never what the server allows.
 struct ViewAsMenu: View {
   /// True on My Classes, where the row is its own card; false inside an Account list row.
   var boxed = false
@@ -221,7 +224,7 @@ struct ViewAsMenu: View {
   var body: some View {
     Menu {
       Picker(
-        "View as",
+        "Switch role",
         selection: Binding(
           get: { store.role }, set: { role in Task { await store.setViewRole(role) } })
       ) {
@@ -229,8 +232,8 @@ struct ViewAsMenu: View {
       }
     } label: {
       HStack(spacing: 12) {
-        Image(systemName: "eye.fill").foregroundStyle(Theme.accent)
-        Text("View as").foregroundStyle(.secondary)
+        Image(systemName: "arrow.left.arrow.right.circle.fill").foregroundStyle(Theme.accent)
+        Text("Switch role").foregroundStyle(.secondary)
         Spacer()
         Text(Store.roleName(store.role)).fontWeight(.semibold).foregroundStyle(.primary)
         Image(systemName: "chevron.up.chevron.down").font(.footnote.weight(.semibold))
@@ -242,7 +245,7 @@ struct ViewAsMenu: View {
       .overlay(card.stroke(boxed ? Theme.cardBorder : Color.clear))
       .contentShape(Rectangle())
     }
-    .accessibilityLabel("View as \(Store.roleName(store.role))")
+    .accessibilityLabel("Switch role. Now \(Store.roleName(store.role))")
     .accessibilityIdentifier("view-as")
   }
 }
@@ -930,7 +933,10 @@ struct AccountView: View {
         Section {
           ViewAsMenu()
         } footer: {
-          Text("Owner account only: see the app as each role. The server still checks every request.")
+          Text(
+            store.isOwner
+              ? "Owner account: see the app as each role. The server still checks every request."
+              : "Your email has more than one role. Switch to see that role's classes and pages.")
         }
       }
 

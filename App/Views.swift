@@ -162,8 +162,10 @@ struct LoginView: View {
               Text(
                 store.loginChoice == "trainer"
                   ? "See the classes you teach, attendance, payout and training hours."
-                  : "See the courses you are taking. Trainers attending a course sign in as a learner."
+                  : "See the courses you are taking."
               ).font(.footnote).foregroundStyle(.secondary)
+              Text("One email with more than one role can switch roles after signing in.")
+                .font(.footnote).foregroundStyle(.secondary)
             }
 
             inputRow(icon: "envelope.fill") {

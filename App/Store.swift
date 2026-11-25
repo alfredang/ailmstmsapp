@@ -28,11 +28,13 @@ import UserNotifications
 
   // MARK: Roles
   //
-  // The app shows one role per sign-in. Learner and Trainer come from the sign-in screen's
-  // choice; Admin is what an admin sign-in (Google, allow-listed on the server) shows. The
-  // owner account can switch between all four to check each role's screens. The choice
-  // changes what this device shows, never what the server allows: every request is still
-  // checked against the roles the account holds.
+  // The app shows one role at a time. Sign-in opens the sign-in screen's Learner / Trainer
+  // choice; Admin is what an admin sign-in (Google, allow-listed on the server) shows. An
+  // email that holds more than one role (Learner, Trainer, Developer) switches between them
+  // with "Switch role", and each role shows its own classes and tabs. The owner account can
+  // switch between all four to check each role's screens. The choice changes what this
+  // device shows, never what the server allows: every request is still checked against the
+  // roles the account holds.
 
   /// Every role the app can show, in display order. The tabs, chip and switcher follow it.
   static let knownRoles = ["learner", "trainer", "developer", "admin"]
@@ -59,8 +61,8 @@ import UserNotifications
   @Published private(set) var adminSession = UserDefaults.standard.bool(forKey: Store.adminSessionKey) {
     didSet { UserDefaults.standard.set(adminSession, forKey: Self.adminSessionKey) }
   }
-  /// The roles this account can be shown as: the learner and trainer roles it holds on the
-  /// server, plus Admin after an admin sign-in. The owner can be shown as every role.
+  /// The roles this account can be shown as: the learner, trainer and developer roles it
+  /// holds on the server, plus Admin after an admin sign-in. The owner can be shown as every role.
   var roles: [String] {
     if isOwner { return Self.knownRoles }
     return Self.knownRoles.filter {
@@ -69,8 +71,8 @@ import UserNotifications
   }
   var isOwner: Bool { !demo && user.map { Self.isOwner($0) } ?? false }
   private static func isOwner(_ user: User) -> Bool { user.email.lowercased() == ownerEmail }
-  /// The roles offered in the "View as" switcher: more than one for the owner only.
-  var availableRoles: [String] { isOwner ? roles : [role] }
+  /// The roles offered in the "Switch role" menu: every role the account can be shown as.
+  var availableRoles: [String] { roles.contains(role) ? roles : [role] }
   var canSwitchRole: Bool { availableRoles.count > 1 }
   /// Showing a back-office role (Developer or Admin) rather than Learner or Trainer.
   var isStaffView: Bool { Self.staffRoles.contains(role) }
@@ -81,9 +83,10 @@ import UserNotifications
   private func resolveRole(for user: User, chosen: String?, announce: Bool) -> String? {
     let held = Self.knownRoles.filter { user.roles.contains($0) }
     guard let fallback = held.first else { return nil }
-    if Self.isOwner(user),
-      let viewing = UserDefaults.standard.string(forKey: "viewRole"),
-      Self.knownRoles.contains(viewing)
+    // The role last switched to on this device, if the account may still be shown as it.
+    if let viewing = UserDefaults.standard.string(forKey: "viewRole"),
+      Self.knownRoles.contains(viewing),
+      Self.isOwner(user) || held.contains(viewing) || (viewing == "admin" && adminSession)
     {
       return viewing
     }
@@ -99,12 +102,16 @@ import UserNotifications
     return held.contains("learner") ? "learner" : fallback
   }
 
-  /// Owner only: look at the app as another role.
+  /// Show the app as another role this account holds: that role's classes, calendar and tabs.
+  /// Kept on this device, so a relaunch opens the same role.
   func setViewRole(_ new: String) async {
     guard canSwitchRole, availableRoles.contains(new), new != role else { return }
-    UserDefaults.standard.set(new, forKey: "viewRole")
+    if !demo { UserDefaults.standard.set(new, forKey: "viewRole") }
     role = new
     dashboard = Dashboard(courses: [], sessions: [])
+    // Sample classes share ids across roles: start each role's sample afresh.
+    demoDetails = [:]
+    demoSheets = [:]
     selectedTab = 0
     await refresh()
   }
@@ -143,6 +150,8 @@ import UserNotifications
     do {
       let reply: LoginReply = try await API.shared.request(
         "mobile/auth", method: "POST", body: ["action": "verify", "email": email, "otp": otp])
+      // A new sign-in opens the role chosen on the sign-in screen.
+      UserDefaults.standard.removeObject(forKey: "viewRole")
       guard
         let allowed = resolveRole(for: reply.data.user, chosen: loginChoice, announce: true)
       else {
@@ -200,6 +209,7 @@ import UserNotifications
       }
       let reply: PasswordReply = try await API.shared.request(
         "mobile/login", method: "POST", body: ["email": email, "password": password])
+      UserDefaults.standard.removeObject(forKey: "viewRole")
       guard
         let allowed = resolveRole(for: reply.data.user, chosen: loginChoice, announce: true)
       else {
@@ -331,8 +341,23 @@ import UserNotifications
     do {
       dashboard = try await API.shared.dashboard(role: role)
       error = nil
-      await ClassAlerts.schedule(for: upcoming, enabled: notifications)
+      await ClassAlerts.schedule(for: await reminderSessions(), enabled: notifications)
     } catch { self.error = error.localizedDescription }
+  }
+
+  /// The sessions to remind about: this role's upcoming classes, plus those of the account's
+  /// other classroom role (a trainer who is also a learner), so switching roles never drops
+  /// a reminder. If the other role cannot be loaded, the shown role's reminders still go ahead.
+  private func reminderSessions() async -> [ClassSession] {
+    var sessions = upcoming
+    for other in roles where other != role && (other == "learner" || other == "trainer") {
+      guard let more = try? await API.shared.dashboard(role: other) else { continue }
+      let seen = Set(sessions.map(\.id))
+      sessions += more.sessions.filter {
+        !seen.contains($0.id) && ($0.end ?? $0.start ?? .distantPast) >= Date()
+      }
+    }
+    return sessions.sorted { ($0.start ?? .distantFuture) < ($1.start ?? .distantFuture) }
   }
   func signOut() async {
     if !demo {
@@ -377,7 +402,7 @@ import UserNotifications
     user = User(
       id: "demo", email: "sample@example.com",
       fullName: role == "trainer" ? "Alex Tan" : "Jamie Lim", role: role,
-      roles: ["learner", "trainer"])
+      roles: Self.staffRoles.contains(role) ? [role] : ["learner", "trainer"])
     dashboard =
       Self.staffRoles.contains(role) ? Dashboard(courses: [], sessions: []) : Sample.data(role: role)
     profile = Sample.profile(role: role, theme: theme)
@@ -430,7 +455,7 @@ import UserNotifications
     let s = await UNUserNotificationCenter.current().notificationSettings()
     notifications = s.authorizationStatus == .authorized || s.authorizationStatus == .provisional
     if notifications && !demo { UIApplication.shared.registerForRemoteNotifications() }
-    if !demo { await ClassAlerts.schedule(for: upcoming, enabled: notifications) }
+    if !demo { await ClassAlerts.schedule(for: await reminderSessions(), enabled: notifications) }
   }
   func enableNotifications() async {
     do {
